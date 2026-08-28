@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "db:local:init": "wrangler d1 execute nz-connections --local --file=database/schema.sql",
+    "db:local:seed": "wrangler d1 execute nz-connections --local --file=database/demo-realpath.sql",
+    "db:local:setup": "npm run db:local:init && npm run db:local:seed",
+    "nzbn:sql": "node importers/nzbn/to-sql.mjs"
   },
   "devDependencies": {
     "@sveltejs/adapter-cloudflare": "latest",
