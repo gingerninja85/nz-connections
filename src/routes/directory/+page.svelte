@@ -1,0 +1,20 @@
+<script lang="ts">
+  import { page } from '$app/state';
+  import { goto } from '$app/navigation';
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  let kind = $state(page.url.searchParams.get('kind') === 'officers' ? 'officers' : 'charities');
+  let letter = $state((page.url.searchParams.get('letter') ?? 'A').toUpperCase());
+  let results = $state<any[]>([]); let loading = $state(true);
+  async function load() { loading=true; const r=await fetch(`/api/directory?kind=${kind}&letter=${letter}`); const p=await r.json(); results=p.results??[]; loading=false; }
+  function choose(nextKind:string,nextLetter:string){kind=nextKind;letter=nextLetter;goto(`/directory?kind=${kind}&letter=${letter}`,{replaceState:true,noScroll:true});load();}
+  $effect(()=>{ load(); });
+</script>
+<svelte:head><title>{kind === 'officers' ? 'Charity Officers' : 'Charities'} · NZ Connections</title></svelte:head>
+<header><a href="/">← NZ Connections</a><a href="/explore">Search records</a></header>
+<main><div class="eyebrow">PUBLIC RECORD DIRECTORY</div><h1>{kind === 'officers' ? 'Charity Officers' : 'Charities'}</h1><p>Browse imported Charities Register records alphabetically.</p>
+  <div class="switch"><button class:active={kind==='charities'} onclick={()=>choose('charities',letter)}>Charities</button><button class:active={kind==='officers'} onclick={()=>choose('officers',letter)}>Charity Officers</button></div>
+  <nav class="alphabet" aria-label="Alphabetical directory">{#each letters as l}<button class:active={letter===l} onclick={()=>choose(kind,l)}>{l}</button>{/each}</nav>
+  <div class="count">{loading?'LOADING…':`${results.length} RECORDS BEGINNING WITH ${letter}`}</div>
+  <section>{#each results as e}<a class="row" href={`/record/${e.id}`}><div><strong>{e.canonical_name}</strong><span>{e.entity_type.replace('_',' ')}{e.status?` · ${e.status}`:''}{e.nzbn?` · NZBN ${e.nzbn}`:''}</span></div><div class:connected={Number(e.relationship_count)>0} class="connections">{e.relationship_count ?? 0}</div><span class="open">View →</span></a>{/each}{#if !loading&&results.length===0}<div class="empty">No imported records beginning with {letter}.</div>{/if}</section>
+</main>
+<style>:global(*){box-sizing:border-box}:global(body){margin:0;background:#07110f;color:#edf5f1;font-family:Inter,system-ui,sans-serif}:global(a){color:inherit;text-decoration:none}header{height:70px;border-bottom:1px solid #20332d;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,6vw);font-size:13px;color:#9cafaa}main{max-width:1000px;margin:auto;padding:60px 24px 100px}.eyebrow{font-size:10px;letter-spacing:.16em;font-weight:900;color:#4de1a1}h1{font-size:48px;letter-spacing:-.045em;margin:10px 0}p{color:#839890}.switch{display:flex;gap:8px;margin:30px 0 20px}.switch button,.alphabet button{cursor:pointer;background:#0d1b17;border:1px solid #29443b;color:#81958e;border-radius:7px}.switch button{padding:10px 15px;font-weight:800}.switch button.active,.alphabet button.active{background:#12392b;border-color:#4de1a1;color:#a4ffd2}.alphabet{display:flex;flex-wrap:wrap;gap:5px;padding:16px 0;border-top:1px solid #20332d;border-bottom:1px solid #20332d}.alphabet button{width:30px;height:30px}.count{font-size:10px;letter-spacing:.12em;color:#60766e;margin:22px 0 10px}section{border-top:1px solid #20332d}.row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:18px;padding:17px 5px;border-bottom:1px solid #20332d}.row:hover{background:#0a1713}.row>div:first-child{display:flex;flex-direction:column;gap:4px}.row strong{font-size:15px}.row span{font-size:11px;color:#71867e}.connections{display:grid;place-items:center;min-width:28px;height:22px;padding:0 7px;border-radius:999px;border:1px solid #31443e;color:#6f817b;font-size:10px;font-weight:800}.connections.connected{border-color:#267653;background:#0d2a20;color:#63e8aa}.open{color:#4de1a1!important}.empty{padding:40px 5px;color:#71867e}@media(max-width:600px){h1{font-size:38px}.open{display:none}.row{grid-template-columns:1fr auto}}</style>
