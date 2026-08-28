@@ -13,9 +13,7 @@
   },
   "d1_databases": [
     {
-      "binding": "DB",
-      "database_name": "nz-connections",
-      "database_id": "local-development"
+      "binding": "DB"
     }
   ]
 }
