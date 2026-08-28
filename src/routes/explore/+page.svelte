@@ -3,36 +3,60 @@
   import { goto } from '$app/navigation';
   import { findDemoEntities } from '$lib/demo';
 
+  type SearchResult = { id: string | number; canonical_name?: string; name?: string; entity_type?: string; type?: string; nzbn?: string | null; company_number?: string | null; status?: string | null; subtitle?: string };
+
   let query = $state(page.url.searchParams.get('q') ?? '');
-  let results = $derived(findDemoEntities(query));
+  let results = $state<SearchResult[]>(findDemoEntities(query));
+  let mode = $state<'demo' | 'live'>('demo');
+  let loading = $state(false);
   let timer: ReturnType<typeof setTimeout>;
+
+  async function runSearch() {
+    const q = query.trim();
+    if (q.length < 2) { results = findDemoEntities(q); mode = 'demo'; return; }
+    loading = true;
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      if (response.ok) {
+        const payload = await response.json();
+        if (Array.isArray(payload.results)) { results = payload.results; mode = 'live'; return; }
+      }
+      results = findDemoEntities(q); mode = 'demo';
+    } catch { results = findDemoEntities(q); mode = 'demo'; }
+    finally { loading = false; }
+  }
 
   function syncQuery() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const url = new URL(page.url);
-      if (query.trim()) url.searchParams.set('q', query.trim());
-      else url.searchParams.delete('q');
+      if (query.trim()) url.searchParams.set('q', query.trim()); else url.searchParams.delete('q');
       goto(`${url.pathname}${url.search}`, { replaceState: true, noScroll: true, keepFocus: true });
+      runSearch();
     }, 180);
   }
+
+  $effect(() => { runSearch(); });
 </script>
 
 <svelte:head><title>Explore · NZ Connections</title></svelte:head>
-<header><a href="/">← NZ Connections</a><span>INTERACTIVE PROTOTYPE</span></header>
+<header><a href="/">← NZ Connections</a><span>{mode === 'live' ? 'LIVE PUBLIC DATA' : 'INTERACTIVE PROTOTYPE'}</span></header>
 <main>
-  <div class="intro"><div class="eyebrow">EXPLORE THE GRAPH</div><h1>Search public records</h1><p>This build currently uses clearly labelled fictional records so the interface and evidence workflow can be tested before real datasets are imported.</p></div>
-  <label class="search"><span>⌕</span><input bind:value={query} oninput={syncQuery} autofocus placeholder="Try ‘Southern’, ‘Maia’, ‘contract’…" /></label>
-  <div class="count">{results.length} {results.length === 1 ? 'record' : 'records'}</div>
+  <div class="intro"><div class="eyebrow">EXPLORE THE GRAPH</div><h1>Search public records</h1><p>{mode === 'live' ? 'Results below are loaded from the NZ Connections public-record database.' : 'Until the D1 database is connected, this build falls back to clearly labelled fictional records so the interface can still be tested.'}</p></div>
+  <label class="search"><span>⌕</span><input bind:value={query} oninput={syncQuery} autofocus placeholder="Search a company, person, NZBN…" /></label>
+  <div class="count">{loading ? 'SEARCHING…' : `${results.length} ${results.length === 1 ? 'record' : 'records'} · ${mode === 'live' ? 'LIVE' : 'DEMO'}`}</div>
   <section class="results">
     {#each results as entity}
-      <a class="result" href={`/entity/${entity.id}`}>
-        <div class={`icon ${entity.type}`}>{entity.type === 'person' ? 'P' : entity.type === 'company' ? 'C' : entity.type === 'agency' ? 'A' : '↗'}</div>
-        <div class="copy"><strong>{entity.name}</strong><span>{entity.subtitle}</span></div>
-        <div class="open">View connections →</div>
+      {@const id = entity.id}
+      {@const name = entity.canonical_name ?? entity.name ?? 'Unnamed record'}
+      {@const type = entity.entity_type ?? entity.type ?? 'other'}
+      {@const subtitle = entity.subtitle ?? [type.replace('_',' '), entity.status, entity.nzbn ? `NZBN ${entity.nzbn}` : null].filter(Boolean).join(' · ')}
+      <a class="result" href={mode === 'demo' ? `/entity/${id}` : `/record/${id}`}>
+        <div class={`icon ${type}`}>{type === 'person' ? 'P' : type === 'company' ? 'C' : type === 'public_agency' || type === 'agency' ? 'A' : '↗'}</div>
+        <div class="copy"><strong>{name}</strong><span>{subtitle}</span></div><div class="open">View record →</div>
       </a>
     {/each}
-    {#if results.length === 0}<div class="empty">No demonstration records match that search.</div>{/if}
+    {#if !loading && results.length === 0}<div class="empty">No records match that search.</div>{/if}
   </section>
 </main>
 <style>
