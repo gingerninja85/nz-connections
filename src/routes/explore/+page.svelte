@@ -1,14 +1,28 @@
 <script lang="ts">
+  import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import { findDemoEntities } from '$lib/demo';
-  let query = '';
-  $: results = findDemoEntities(query);
+
+  let query = $state(page.url.searchParams.get('q') ?? '');
+  let results = $derived(findDemoEntities(query));
+  let timer: ReturnType<typeof setTimeout>;
+
+  function syncQuery() {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const url = new URL(page.url);
+      if (query.trim()) url.searchParams.set('q', query.trim());
+      else url.searchParams.delete('q');
+      goto(`${url.pathname}${url.search}`, { replaceState: true, noScroll: true, keepFocus: true });
+    }, 180);
+  }
 </script>
 
 <svelte:head><title>Explore · NZ Connections</title></svelte:head>
 <header><a href="/">← NZ Connections</a><span>INTERACTIVE PROTOTYPE</span></header>
 <main>
   <div class="intro"><div class="eyebrow">EXPLORE THE GRAPH</div><h1>Search public records</h1><p>This build currently uses clearly labelled fictional records so the interface and evidence workflow can be tested before real datasets are imported.</p></div>
-  <label class="search"><span>⌕</span><input bind:value={query} autofocus placeholder="Try ‘Southern’, ‘Maia’, ‘contract’…" /></label>
+  <label class="search"><span>⌕</span><input bind:value={query} oninput={syncQuery} autofocus placeholder="Try ‘Southern’, ‘Maia’, ‘contract’…" /></label>
   <div class="count">{results.length} {results.length === 1 ? 'record' : 'records'}</div>
   <section class="results">
     {#each results as entity}
