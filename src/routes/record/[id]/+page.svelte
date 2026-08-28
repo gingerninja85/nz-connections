@@ -1,4 +1,17 @@
-<script lang="ts">let { data } = $props(); const e = data.entity as Record<string, any>; const connections = data.connections as Record<string, any>[];</script>
+<script lang="ts">
+  let { data } = $props();
+  const e = data.entity as Record<string, any>;
+  const connections = data.connections as Record<string, any>[];
+  const relationshipLabels: Record<string, { out: string; in: string }> = {
+    OFFICER_OF: { out: 'Officer of:', in: 'Officer:' }
+  };
+  function relationshipLabel(predicate: string, direction: string) {
+    const known = relationshipLabels[predicate];
+    if (known) return direction === 'out' ? known.out : known.in;
+    const fallback = String(predicate).replaceAll('_', ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+    return direction === 'out' ? `${fallback}:` : `Connected by ${fallback.toLowerCase()}:`;
+  }
+</script>
 <svelte:head><title>{e.canonical_name} · NZ Connections</title></svelte:head>
 <header><a href="/explore">← Search</a><a class="brand" href="/">NZ <b>Connections</b></a></header>
 <main>
@@ -7,7 +20,7 @@
     <div class="ids">{#if e.nzbn}<div><span>NZBN</span><strong>{e.nzbn}</strong></div>{/if}{#if e.company_number}<div><span>COMPANY NUMBER</span><strong>{e.company_number}</strong></div>{/if}</div>
   </section>
   <section class="connections"><div class="sectionhead"><div><span>SOURCE-BACKED RELATIONSHIPS</span><h2>Connections</h2></div><div class="total">{connections.length}</div></div>
-    {#each connections as c}<article><div class="relation"><span>{c.direction === 'out' ? c.predicate : `← ${c.predicate}`}</span><a href={`/record/${c.connected_id}`}>{c.connected_name}</a><small>{String(c.connected_type).replace('_',' ')}{c.connected_status ? ` · ${c.connected_status}` : ''}</small></div>
+    {#each connections as c}<article><div class="relation"><span>{relationshipLabel(c.predicate, c.direction)}</span><a href={`/record/${c.connected_id}`}>{c.connected_name}</a><small>{String(c.connected_type).replace('_',' ')}{c.connected_status ? ` · ${c.connected_status}` : ''}</small></div>
       <details><summary>View evidence</summary><div class="evidence"><div class="source"><span>SOURCE</span><a href={c.source_url} target="_blank" rel="noreferrer">{c.publisher} · {c.dataset} ↗</a></div><dl>{#if c.record_id}<dt>Record</dt><dd>{c.record_id}</dd>{/if}{#if c.published_at}<dt>Published</dt><dd>{c.published_at}</dd>{/if}<dt>Retrieved</dt><dd>{c.retrieved_at}</dd>{#if c.licence}<dt>Licence</dt><dd>{c.licence}</dd>{/if}</dl></div></details></article>{/each}
     {#if connections.length === 0}<div class="empty">No source-backed relationships are currently loaded for this record.</div>{/if}
   </section>
