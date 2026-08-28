@@ -13,7 +13,8 @@
     "db:local:init": "wrangler d1 execute nz-connections --local --file=database/schema.sql",
     "db:local:seed": "wrangler d1 execute nz-connections --local --file=database/demo-realpath.sql",
     "db:local:setup": "npm run db:local:init && npm run db:local:seed",
-    "nzbn:sql": "node importers/nzbn/to-sql.mjs"
+    "nzbn:sql": "node importers/nzbn/to-sql.mjs",
+    "charities:sql": "node importers/charities/to-sql.mjs"
   },
   "devDependencies": {
     "@sveltejs/adapter-cloudflare": "latest",
