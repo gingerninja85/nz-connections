@@ -12,7 +12,10 @@ $charityStatements=(Select-String .\charities-bulk.sql -Pattern 'INSERT INTO ent
 $officerStatements=(Select-String .\charity-officers-bulk.sql -Pattern 'INSERT INTO entities').Count
 $relationshipStatements=(Select-String .\charity-officers-bulk.sql -Pattern 'INSERT INTO relationships').Count
 Write-Host "Generated: charities=$charityStatements officers=$officerStatements relationships=$relationshipStatements"
-if($charityStatements -lt 1 -or $officerStatements -lt 1){ throw 'Generated SQL failed sanity check.' }
+if($charityStatements -lt 1 -or $officerStatements -lt 1){throw 'Generated SQL failed sanity check.'}
+Write-Host 'Applying current schema/migrations...'
+npx wrangler d1 execute $Database --remote --file=database/schema.sql
+if($LASTEXITCODE -ne 0){throw 'Schema update failed.'}
 Write-Host 'Importing charities...'
 npx wrangler d1 execute $Database --remote --file=charities-bulk.sql
 if($LASTEXITCODE -ne 0){throw 'Charity import failed.'}
