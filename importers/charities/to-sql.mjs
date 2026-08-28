@@ -12,7 +12,7 @@
  *   node importers/charities/to-sql.mjs --limit=100 > charities.sql
  */
 
-const BASE = 'https://www.odata.charities.govt.nz';
+const BASE = 'http://www.odata.charities.govt.nz';
 const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
 const limit = limitArg ? Math.max(1, Number(limitArg.split('=')[1]) || 100) : null;
 
@@ -31,8 +31,14 @@ function slugify(value) {
     .slice(0, 90);
 }
 
+// Charities Services currently exposes an OData v3 service. Depending on the
+// JSON verbosity negotiated by the server, collections may be returned as
+// { d: [...] }, { d: { results: [...] } }, or { value: [...] }.
 function values(payload) {
-  return payload?.value ?? payload?.d?.results ?? [];
+  if (Array.isArray(payload?.value)) return payload.value;
+  if (Array.isArray(payload?.d)) return payload.d;
+  if (Array.isArray(payload?.d?.results)) return payload.d.results;
+  return [];
 }
 
 async function fetchJson(path) {
@@ -50,12 +56,16 @@ function pick(obj, ...keys) {
 
 const orgPath = `/Organisations?${limit ? `$top=${limit}&` : '$returnall=true&'}$orderby=CharityRegistrationNumber`;
 const organisations = values(await fetchJson(orgPath));
+if (organisations.length === 0) {
+  throw new Error('Charities Services returned zero organisation records; refusing to generate an empty import.');
+}
 const retrievedAt = new Date().toISOString();
 
 console.log('PRAGMA foreign_keys = ON;');
 console.log('BEGIN TRANSACTION;');
 console.log(`INSERT INTO import_runs(dataset, publisher, started_at, status, metadata_json) VALUES ('charities-register', 'Charities Services, Department of Internal Affairs', ${sql(retrievedAt)}, 'running', ${sql(JSON.stringify({ endpoint: BASE, count: organisations.length }))});`);
 
+let written = 0;
 for (const org of organisations) {
   const registration = pick(org, 'CharityRegistrationNumber', 'RegistrationNumber');
   const name = pick(org, 'Name', 'OrganisationName');
@@ -78,7 +88,8 @@ for (const org of organisations) {
   console.log(`INSERT INTO entities(entity_type, canonical_name, slug, nzbn, status, metadata_json, updated_at) VALUES ('charity', ${sql(name)}, ${sql(slug)}, ${sql(nzbn)}, ${sql(status)}, ${sql(JSON.stringify(metadata))}, CURRENT_TIMESTAMP) ON CONFLICT(slug) DO UPDATE SET canonical_name=excluded.canonical_name, nzbn=COALESCE(excluded.nzbn, entities.nzbn), status=excluded.status, metadata_json=excluded.metadata_json, updated_at=CURRENT_TIMESTAMP;`);
   console.log(`INSERT INTO sources(dataset, publisher, record_id, source_url, retrieved_at, licence, importer_version) VALUES ('charities-register', 'Charities Services, Department of Internal Affairs', ${sql(recordId)}, ${sql(sourceUrl)}, ${sql(retrievedAt)}, 'Creative Commons Attribution 3.0 New Zealand', 'charities-odata-v1') ON CONFLICT DO NOTHING;`);
   console.log(`INSERT INTO entity_sources(entity_id, source_id, metadata_json) SELECT e.id, s.id, ${sql(JSON.stringify({ role: 'register-record' }))} FROM entities e JOIN sources s ON s.dataset='charities-register' AND s.record_id=${sql(recordId)} WHERE e.slug=${sql(slug)} ON CONFLICT(entity_id, source_id) DO UPDATE SET metadata_json=excluded.metadata_json;`);
+  written++;
 }
 
-console.log(`UPDATE import_runs SET completed_at=CURRENT_TIMESTAMP, status='completed', records_seen=${organisations.length}, records_written=${organisations.length} WHERE id=(SELECT MAX(id) FROM import_runs WHERE dataset='charities-register');`);
+console.log(`UPDATE import_runs SET completed_at=CURRENT_TIMESTAMP, status='completed', records_seen=${organisations.length}, records_written=${written} WHERE id=(SELECT MAX(id) FROM import_runs WHERE dataset='charities-register');`);
 console.log('COMMIT;');
