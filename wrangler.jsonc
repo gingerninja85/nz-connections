@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "nz-connections",
+  "compatibility_date": "2026-08-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "assets": {
+    "directory": ".svelte-kit/cloudflare"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // Add the production D1 binding after the database is created:
+  // "d1_databases": [{
+  //   "binding": "DB",
+  //   "database_name": "nz-connections",
+  //   "database_id": "<created-in-cloudflare>"
+  // }]
+}
