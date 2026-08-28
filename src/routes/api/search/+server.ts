@@ -8,7 +8,18 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 
   const terms = q.split(/\s+/).filter(Boolean).map((term) => `"${term.replaceAll('"', '""')}"*`).join(' ');
   const result = await platform.env.DB.prepare(`
-    SELECT e.id, e.canonical_name, e.entity_type, e.nzbn, e.company_number, e.status
+    SELECT
+      e.id,
+      e.canonical_name,
+      e.entity_type,
+      e.nzbn,
+      e.company_number,
+      e.status,
+      (
+        SELECT COUNT(*)
+        FROM relationships r
+        WHERE r.subject_entity_id = e.id OR r.object_entity_id = e.id
+      ) AS relationship_count
     FROM entity_search s
     JOIN entities e ON e.id = s.rowid
     WHERE entity_search MATCH ?
