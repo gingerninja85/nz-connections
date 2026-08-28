@@ -7,6 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "npm run build && wrangler dev",
+    "try-it": "npm run db:local:setup && npm run dev -- --host 0.0.0.0",
     "deploy": "npm run build && wrangler deploy",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "db:local:init": "wrangler d1 execute nz-connections --local --file=database/schema.sql",
