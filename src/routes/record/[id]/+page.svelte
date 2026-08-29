@@ -1,5 +1,8 @@
 <script lang="ts">
- let {data}=$props(); const e=data.entity as Record<string,any>; const connections=data.connections as Record<string,any>[]; const isCharityOfficerRecord=String(e.slug??'').startsWith('charities-officer-');
+ let {data}=$props();
+ let e=$derived(data.entity as Record<string,any>);
+ let connections=$derived(data.connections as Record<string,any>[]);
+ let isCharityOfficerRecord=$derived(String(e.slug??'').startsWith('charities-officer-'));
  const relationshipLabels:Record<string,{out:string;in:string}>={OFFICER_OF:{out:'Officer of',in:'Officer'}};
  function relationshipLabel(predicate:string,direction:string){const known=relationshipLabels[predicate];if(known)return direction==='out'?known.out:known.in;const fallback=String(predicate).replaceAll('_',' ').toLowerCase().replace(/^./,(c)=>c.toUpperCase());return direction==='out'?fallback:`Connected by ${fallback.toLowerCase()}`;}
 </script>
