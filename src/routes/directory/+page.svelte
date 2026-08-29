@@ -10,8 +10,8 @@
   function choose(nextKind:string,nextLetter:string,nextSort=sort){kind=nextKind;letter=nextLetter;sort=nextSort;goto(`/directory?kind=${kind}&letter=${letter}&sort=${sort}`,{replaceState:true,noScroll:true});load();}
   $effect(()=>{load();});
 </script>
-<svelte:head><title>{kind==='officers'?'Charity officer records':'Charities'} · NZ Connections</title></svelte:head>
-<header><div><a class="brand" href="/">NZ Connections</a><nav><a href="/explore">Search</a><a href="/directory?kind=charities&letter=A">Charities</a><a href="/directory?kind=officers&letter=A">Officer records</a></nav></div></header>
+<svelte:head><title>{kind==='officers'?'Charity officer records':'Charities'} · NZ Records</title></svelte:head>
+<header><div><a class="brand" href="/">NZ Records</a><nav><a href="/explore">Search</a><a href="/directory?kind=charities&letter=A">Charities</a><a href="/directory?kind=officers&letter=A">Officer records</a></nav></div></header>
 <main><p class="breadcrumb"><a href="/">Home</a> / Public records</p><h1>{kind==='officers'?'Charity officer records':'Charities'}</h1><p class="intro">{kind==='officers'?'People and organisations listed as officers in the Charities Register.':'Charities imported from the New Zealand Charities Register.'}</p>
 {#if kind==='officers'}<aside class="note"><strong>A note about names</strong><span>The same person may appear more than once if they are involved with different charities. We don't combine records just because the names match, because they could be different people.</span></aside>{/if}
 <div class="tabs"><button class:active={kind==='charities'} onclick={()=>choose('charities',letter)}>Charities</button><button class:active={kind==='officers'} onclick={()=>choose('officers',letter)}>Officer records</button></div>
