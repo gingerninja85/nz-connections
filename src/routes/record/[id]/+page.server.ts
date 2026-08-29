@@ -1,16 +1,47 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
+type D1DatabaseLike = {
+  prepare: (query: string) => { bind: (...values: unknown[]) => { first: () => Promise<unknown>; all: () => Promise<{ results: unknown[] }> } };
+};
+
+function isMissingGetsTableError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /no such table:\s*gets_/i.test(message);
+}
+
+async function getsFirst(db: D1DatabaseLike, query: string, ...values: unknown[]) {
+  try {
+    return await db.prepare(query).bind(...values).first();
+  } catch (err) {
+    if (isMissingGetsTableError(err)) return null;
+    throw err;
+  }
+}
+
+async function getsAll(db: D1DatabaseLike, query: string, ...values: unknown[]) {
+  try {
+    return (await db.prepare(query).bind(...values).all()).results;
+  } catch (err) {
+    if (isMissingGetsTableError(err)) return [];
+    throw err;
+  }
+}
+
 export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform?.env?.DB) error(503, 'Public-record database is not connected yet.');
   const id = Number(params.id);
   if (!Number.isInteger(id) || id < 1) error(404, 'Record not found');
 
-  const entity = await platform.env.DB.prepare(`SELECT id, entity_type, canonical_name, slug, nzbn, company_number, status, metadata_json FROM entities WHERE id = ?1`).bind(id).first();
+  const entity = await platform.env.DB.prepare(`
+    SELECT id, entity_type, canonical_name, slug, nzbn, company_number, status, metadata_json
+    FROM entities
+    WHERE id = ?1
+  `).bind(id).first();
   if (!entity) error(404, 'Record not found');
 
   const connections = await platform.env.DB.prepare(`
-    SELECT r.id, r.predicate, r.valid_from, r.valid_to, r.observed_at,
+    SELECT r.id, r.predicate, r.valid_from, r.valid_to, r.observed_at, r.metadata_json AS relationship_metadata_json,
       CASE WHEN r.subject_entity_id = ?1 THEN 'out' ELSE 'in' END AS direction,
       e.id AS connected_id, e.canonical_name AS connected_name, e.entity_type AS connected_type, e.status AS connected_status,
       s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
@@ -22,5 +53,54 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     LIMIT 250
   `).bind(id).all();
 
-  return { entity, connections: connections.results };
+  const getsRfx = (await getsFirst(platform.env.DB, `
+    SELECT * FROM gets_rfx_records WHERE entity_id = ?1
+  `, id)) as Record<string, any> | null;
+
+  const getsSupplier = (await getsFirst(platform.env.DB, `
+    SELECT * FROM gets_supplier_records WHERE entity_id = ?1
+  `, id)) as Record<string, any> | null;
+
+  let getsRegions: unknown[] = [];
+  let getsCategories: unknown[] = [];
+  let getsSuppliers: unknown[] = [];
+  let getsRelatedRfx: unknown[] = [];
+
+  if (getsRfx) {
+    getsRegions = await getsAll(platform.env.DB, `
+      SELECT region FROM gets_rfx_regions WHERE rfx_id = ?1 ORDER BY region
+    `, getsRfx.rfx_id);
+    getsCategories = await getsAll(platform.env.DB, `
+      SELECT unspsc_code, unspsc_description FROM gets_rfx_unspsc_categories WHERE rfx_id = ?1 ORDER BY unspsc_code, unspsc_description
+    `, getsRfx.rfx_id);
+    getsSuppliers = await getsAll(platform.env.DB, `
+      SELECT g.business_name, g.nzbn_quality, g.raw_supplier_nzbn, e.id AS entity_id
+      FROM gets_supplier_records g
+      JOIN entities e ON e.id = g.entity_id
+      WHERE g.rfx_id = ?1
+      ORDER BY g.row_ordinal_for_rfx
+    `, getsRfx.rfx_id);
+  }
+
+  if (getsSupplier) {
+    getsRelatedRfx = await getsAll(platform.env.DB, `
+      SELECT g.rfx_id, g.title, g.award_type, e.id AS entity_id
+      FROM gets_rfx_records g
+      JOIN entities e ON e.id = g.entity_id
+      WHERE g.rfx_id = ?1
+    `, getsSupplier.rfx_id);
+  }
+
+  return {
+    entity,
+    connections: connections.results,
+    gets: {
+      rfx: getsRfx,
+      supplier: getsSupplier,
+      regions: getsRegions,
+      categories: getsCategories,
+      suppliers: getsSuppliers,
+      relatedRfx: getsRelatedRfx
+    }
+  };
 };

@@ -1,0 +1,29 @@
+{
+  "name": "GETS local integration 10 RFx sample",
+  "dataset": "MBIE/GETS procurement award notices",
+  "selection_policy": "Deterministic representative sample selected from real GETS rows to exercise awarded/not-awarded semantics, supplier identity isolation, NZBN safety classes, repeated exact agency names, repeated supplier names, multiple suppliers, multiple regions, multiple UNSPSC categories, zero and non-zero reported values. Do not treat as random.",
+  "rfx_ids": [
+    "10199365",
+    "16845263",
+    "16869294",
+    "17169489",
+    "18611132",
+    "21048334",
+    "21048340",
+    "21708123",
+    "11613326",
+    "20496869"
+  ],
+  "reasons": {
+    "10199365": ["ordinary Awarded RFx", "one supplier", "non-zero reported award value", "MISSING NZBN", "Museum of New Zealand Te Papa Tongarewa agency repeat with 17038929 candidate avoided to keep sample to 10"],
+    "16845263": ["Awarded RFx", "Auckland Council exact-name agency repeat", "one supplier", "non-zero reported award value", "multiple UNSPSC categories", "MISSING NZBN"],
+    "16869294": ["Awarded RFx", "Auckland Council exact-name agency repeat", "one supplier", "non-zero reported award value", "multiple UNSPSC categories"],
+    "17169489": ["Awarded RFx", "Auckland Council exact-name agency repeat", "one supplier", "non-zero reported award value", "MALFORMED NZBN"],
+    "18611132": ["Awarded RFx", "manageable multiple suppliers", "zero reported award value", "SCIENTIFIC_NOTATION_LOSSY NZBN", "MISSING NZBN"],
+    "21048334": ["Awarded RFx", "manageable multiple suppliers", "Ministry of Education - School Infrastructure exact-name agency repeat", "MALFORMED NZBN", "SCIENTIFIC_NOTATION_LOSSY NZBN", "MISSING NZBN"],
+    "21048340": ["Awarded RFx", "manageable multiple suppliers", "Ministry of Education - School Infrastructure exact-name agency repeat", "multiple regions", "same supplier name WSP NZ Ltd as RFx 21048334 for identity collision test", "SCIENTIFIC_NOTATION_LOSSY NZBN", "MISSING NZBN"],
+    "21708123": ["Awarded RFx", "manageable multiple suppliers", "OTHER_UNUSABLE NZBN", "SCIENTIFIC_NOTATION_LOSSY NZBN", "multiple UNSPSC categories"],
+    "11613326": ["Not Awarded RFx", "zero suppliers expected", "multiple regions", "multiple UNSPSC categories", "zero reported award value"],
+    "20496869": ["Awarded RFx", "one supplier", "same supplier display name Fulton Hogan collision with wider source corpus but not deduped globally", "zero reported award value", "multiple UNSPSC categories"]
+  }
+}

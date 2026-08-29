@@ -10,6 +10,8 @@
     "try-it": "npm run db:local:setup && npm run dev -- --host 0.0.0.0",
     "deploy": "npm run build && wrangler deploy",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test:gets": "python3 tests/gets_local_integration_test.py",
+    "gets:import:local": "python3 importers/gets/import_gets_local.py --input-dir ../nzrecords-research/mbie-procurement/raw --sample-file importers/gets/sample-rfx-10.json --db ../nzrecords-research/mbie-procurement/integration-report/nz-records-gets-dev.sqlite",
     "db:local:init": "wrangler d1 execute nz-connections --local --file=database/schema.sql",
     "db:local:seed": "wrangler d1 execute nz-connections --local --file=database/demo-realpath.sql",
     "db:local:setup": "npm run db:local:init && npm run db:local:seed",
