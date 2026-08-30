@@ -40,6 +40,7 @@
   let pageNum = $state(readPageFromUrl());
   let results = $state<DirectoryResult[]>([]);
   let loading = $state(true);
+  let error = $state('');
   let total = $state(0);
   let totalPages = $state(1);
 
@@ -51,14 +52,26 @@
 
   async function loadFor(nextKind: DirectoryKind, nextLetter: string, nextSort: string, nextPage: number) {
     loading = true;
-    const params = new URLSearchParams({ kind: nextKind, letter: nextLetter, sort: nextSort, page: String(nextPage), pageSize: String(pageSize) });
-    const response = await fetch(`/api/directory?${params.toString()}`);
-    const payload = await response.json();
-    results = payload.results ?? [];
-    total = Number(payload.total ?? results.length);
-    totalPages = Math.max(1, Number(payload.totalPages ?? 1));
-    pageNum = Math.max(1, Math.min(Number(payload.page ?? nextPage), totalPages));
-    loading = false;
+    error = '';
+    try {
+      const params = new URLSearchParams({ kind: nextKind, letter: nextLetter, sort: nextSort, page: String(nextPage), pageSize: String(pageSize) });
+      const response = await fetch(`/api/directory?${params.toString()}`);
+      if (!response.ok) throw new Error(`Directory request failed: ${response.status}`);
+      const payload = await response.json();
+      results = payload.results ?? [];
+      total = Number(payload.total ?? results.length);
+      totalPages = Math.max(1, Number(payload.totalPages ?? 1));
+      pageNum = Math.max(1, Math.min(Number(payload.page ?? nextPage), totalPages));
+    } catch (err) {
+      console.error('Directory load failed', err);
+      results = [];
+      total = 0;
+      totalPages = 1;
+      pageNum = nextPage;
+      error = 'Directory records could not be loaded. Please try again.';
+    } finally {
+      loading = false;
+    }
   }
 
   function choose(nextKind: DirectoryKind, nextLetter: string, nextSort = sort) {
@@ -90,6 +103,7 @@
 
   $effect(() => {
     page.url.href;
+    if (page.url.pathname !== '/directory') return;
     const nextKind = readKindFromUrl();
     const nextLetter = readLetterFromUrl();
     const nextSort = readSortFromUrl();
@@ -140,6 +154,7 @@
   </div>
 
   <section class="results">
+    {#if error}<div class="empty error">{error}</div>{/if}
     {#each results as e}
       <a class="row" href={`/record/${e.id}`}>
         <div><strong>{e.canonical_name}</strong><span>{kind === 'officers' ? 'Charity officer record' : e.entity_type.replace('_', ' ')}{e.status ? ` · ${e.status}` : ''}{e.nzbn ? ` · NZBN ${e.nzbn}` : ''}</span></div>

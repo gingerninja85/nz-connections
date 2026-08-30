@@ -105,6 +105,7 @@
 
   $effect(() => {
     page.url.href;
+    if (page.url.pathname !== '/explore') return;
     const nextQuery = readQueryFromUrl();
     const nextPage = readPageFromUrl();
     query = nextQuery;
