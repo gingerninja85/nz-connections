@@ -9,7 +9,6 @@ function isMissingGetsTableError(err: unknown) {
   const message = err instanceof Error ? err.message : String(err);
   return /no such table:\s*gets_/i.test(message);
 }
-
 async function getsFirst(db: D1DatabaseLike, query: string, ...values: unknown[]) {
   try { return await db.prepare(query).bind(...values).first(); }
   catch (err) { if (isMissingGetsTableError(err)) return null; throw err; }
@@ -33,6 +32,12 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       CASE WHEN r.subject_entity_id = ?1 THEN 'out' ELSE 'in' END AS direction,
       e.id AS connected_id, e.canonical_name AS connected_name, e.entity_type AS connected_type, e.status AS connected_status, e.slug AS connected_slug, e.metadata_json AS connected_metadata_json,
       gr.entity_id AS connected_gets_rfx_entity_id, gs.entity_id AS connected_gets_supplier_entity_id,
+      gr.rfx_id AS graph_rfx_id, gr.title AS graph_rfx_title, gr.rfx_type AS graph_rfx_type, gr.competition_type AS graph_competition_type,
+      gr.posting_agency AS graph_posting_agency, gr.award_type AS graph_award_type, gr.awarded_amount_raw AS graph_awarded_amount_raw,
+      gr.open_date AS graph_open_date, gr.close_date AS graph_close_date, gr.awarded_date AS graph_awarded_date,
+      (SELECT group_concat(DISTINCT rr.region) FROM gets_rfx_regions rr WHERE rr.rfx_id=gr.rfx_id) AS graph_regions,
+      (SELECT group_concat(DISTINCT rc.unspsc_description) FROM gets_rfx_unspsc_categories rc WHERE rc.rfx_id=gr.rfx_id AND trim(COALESCE(rc.unspsc_description,''))!='') AS graph_categories,
+      (SELECT count(*) FROM gets_supplier_records sp WHERE sp.rfx_id=gr.rfx_id) AS graph_supplier_count,
       s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
     FROM relationships r
     JOIN entities e ON e.id = CASE WHEN r.subject_entity_id = ?1 THEN r.object_entity_id ELSE r.subject_entity_id END
@@ -56,12 +61,23 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       r.object_entity_id AS object_id, oe.canonical_name AS object_name, oe.entity_type AS object_type,
       sgr.entity_id AS subject_gets_rfx_entity_id, sgs.entity_id AS subject_gets_supplier_entity_id,
       ogr.entity_id AS object_gets_rfx_entity_id, ogs.entity_id AS object_gets_supplier_entity_id,
+      COALESCE(sgr.rfx_id,ogr.rfx_id,sgs.rfx_id,ogs.rfx_id) AS graph_rfx_id,
+      COALESCE(sgr.title,ogr.title,pr.title) AS graph_rfx_title,
+      COALESCE(sgr.rfx_type,ogr.rfx_type,pr.rfx_type) AS graph_rfx_type,
+      COALESCE(sgr.competition_type,ogr.competition_type,pr.competition_type) AS graph_competition_type,
+      COALESCE(sgr.posting_agency,ogr.posting_agency,pr.posting_agency) AS graph_posting_agency,
+      COALESCE(sgr.award_type,ogr.award_type,pr.award_type) AS graph_award_type,
+      COALESCE(sgr.awarded_amount_raw,ogr.awarded_amount_raw,pr.awarded_amount_raw) AS graph_awarded_amount_raw,
+      (SELECT group_concat(DISTINCT rr.region) FROM gets_rfx_regions rr WHERE rr.rfx_id=COALESCE(sgr.rfx_id,ogr.rfx_id,sgs.rfx_id,ogs.rfx_id)) AS graph_regions,
+      (SELECT group_concat(DISTINCT rc.unspsc_description) FROM gets_rfx_unspsc_categories rc WHERE rc.rfx_id=COALESCE(sgr.rfx_id,ogr.rfx_id,sgs.rfx_id,ogs.rfx_id) AND trim(COALESCE(rc.unspsc_description,''))!='') AS graph_categories,
+      (SELECT count(*) FROM gets_supplier_records sp WHERE sp.rfx_id=COALESCE(sgr.rfx_id,ogr.rfx_id,sgs.rfx_id,ogs.rfx_id)) AS graph_supplier_count,
       s.dataset, s.publisher, s.record_id, s.source_url
     FROM relationships r
     JOIN direct d ON d.entity_id = r.subject_entity_id OR d.entity_id = r.object_entity_id
     JOIN entities se ON se.id = r.subject_entity_id JOIN entities oe ON oe.id = r.object_entity_id
     LEFT JOIN gets_rfx_records sgr ON sgr.entity_id = se.id LEFT JOIN gets_supplier_records sgs ON sgs.entity_id = se.id
     LEFT JOIN gets_rfx_records ogr ON ogr.entity_id = oe.id LEFT JOIN gets_supplier_records ogs ON ogs.entity_id = oe.id
+    LEFT JOIN gets_rfx_records pr ON pr.rfx_id=COALESCE(sgs.rfx_id,ogs.rfx_id)
     JOIN sources s ON s.id = r.source_id
     WHERE r.subject_entity_id != ?1 AND r.object_entity_id != ?1 ORDER BY r.id LIMIT 180
   `).bind(id).all();
