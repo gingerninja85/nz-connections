@@ -18,7 +18,7 @@
  let visibleConnections=$derived(showAllConnections?connections:connections.slice(0,20));
  let getsKind=$derived(metadata?.gets?.kind as string|undefined);
  let isCharityOfficerRecord=$derived(String(e.slug??'').startsWith('charities-officer-'));
- let isGetsAgencyRecord=$derived(Boolean(gets?.agency)||getsKind==='agency'||connections.some((c)=>c.predicate==='ISSUED'));
+ let isGetsAgencyRecord=$derived(!rfx&&!supplier&&(Boolean(gets?.agency)||getsKind==='agency'||connections.some((c)=>c.predicate==='ISSUED')));
  const relationshipLabels:Record<string,{out:string;in:string}>={OFFICER_OF:{out:'Officer of',in:'Officer'},ISSUED:{out:'Issued by',in:'Government tenders issued'},AWARDED_TO:{out:'Awarded to',in:'Successful supplier for'}};
  function parseMetadata(raw:unknown){try{return raw?JSON.parse(String(raw)):{};}catch{return {};}}
  function relationshipLabel(predicate:string,direction:string){const known=relationshipLabels[predicate];if(known)return direction==='out'?known.out:known.in;const fallback=String(predicate).replaceAll('_',' ').toLowerCase().replace(/^./,(c)=>c.toUpperCase());return direction==='out'?fallback:`Connected by ${fallback.toLowerCase()}`;}

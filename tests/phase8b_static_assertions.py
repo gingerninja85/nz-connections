@@ -102,6 +102,12 @@ def test_record_page_public_connections_do_not_render_internal_entity_types():
     assert "String(c.connected_type).replace('_',' ')" not in record
 
 
+def test_record_page_agency_note_is_not_shown_on_tenders_or_suppliers():
+    record = read('src/routes/record/[id]/+page.svelte')
+    assert '!rfx&&!supplier&&(Boolean(gets?.agency)||getsKind===\'agency\'||connections.some((c)=>c.predicate===\'ISSUED\'))' in record
+    assert "{#if isGetsAgencyRecord}<aside class=\"note\"><strong>About this agency record</strong>" in record
+
+
 def test_supplier_pages_translate_nzbn_quality_and_tender_lists_omit_raw_quality():
     record = read('src/routes/record/[id]/+page.svelte')
     assert 'nzbnSourceNote' in record
