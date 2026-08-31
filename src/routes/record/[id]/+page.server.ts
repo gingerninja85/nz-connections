@@ -11,41 +11,28 @@ function isMissingGetsTableError(err: unknown) {
 }
 
 async function getsFirst(db: D1DatabaseLike, query: string, ...values: unknown[]) {
-  try {
-    return await db.prepare(query).bind(...values).first();
-  } catch (err) {
-    if (isMissingGetsTableError(err)) return null;
-    throw err;
-  }
+  try { return await db.prepare(query).bind(...values).first(); }
+  catch (err) { if (isMissingGetsTableError(err)) return null; throw err; }
 }
-
 async function getsAll(db: D1DatabaseLike, query: string, ...values: unknown[]) {
-  try {
-    return (await db.prepare(query).bind(...values).all()).results;
-  } catch (err) {
-    if (isMissingGetsTableError(err)) return [];
-    throw err;
-  }
+  try { return (await db.prepare(query).bind(...values).all()).results; }
+  catch (err) { if (isMissingGetsTableError(err)) return []; throw err; }
 }
 
 export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform?.env?.DB) error(503, 'Public-record database is not connected yet.');
   const id = Number(params.id);
   if (!Number.isInteger(id) || id < 1) error(404, 'Record not found');
+  const db = platform.env.DB;
 
-  const entity = await platform.env.DB.prepare(`
-    SELECT id, entity_type, canonical_name, slug, nzbn, company_number, status, metadata_json
-    FROM entities
-    WHERE id = ?1
-  `).bind(id).first();
+  const entity = await db.prepare(`SELECT id, entity_type, canonical_name, slug, nzbn, company_number, status, metadata_json FROM entities WHERE id = ?1`).bind(id).first();
   if (!entity) error(404, 'Record not found');
 
-  const connections = await platform.env.DB.prepare(`
+  const connections = await db.prepare(`
     SELECT r.id, r.predicate, r.valid_from, r.valid_to, r.observed_at, r.metadata_json AS relationship_metadata_json,
       CASE WHEN r.subject_entity_id = ?1 THEN 'out' ELSE 'in' END AS direction,
       e.id AS connected_id, e.canonical_name AS connected_name, e.entity_type AS connected_type, e.status AS connected_status, e.slug AS connected_slug, e.metadata_json AS connected_metadata_json,
-      gr.entity_id AS connected_gets_rfx_entity_id,
-      gs.entity_id AS connected_gets_supplier_entity_id,
+      gr.entity_id AS connected_gets_rfx_entity_id, gs.entity_id AS connected_gets_supplier_entity_id,
       s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
     FROM relationships r
     JOIN entities e ON e.id = CASE WHEN r.subject_entity_id = ?1 THEN r.object_entity_id ELSE r.subject_entity_id END
@@ -53,120 +40,54 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     LEFT JOIN gets_supplier_records gs ON gs.entity_id = e.id
     JOIN sources s ON s.id = r.source_id
     WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-    ORDER BY r.predicate, e.canonical_name
-    LIMIT 250
+    ORDER BY r.predicate, e.canonical_name LIMIT 250
   `).bind(id).all();
 
-  // Graph-only second hop. This deliberately starts from the direct neighbours above,
-  // preserves provenance on every edge, and is capped so high-degree agencies cannot
-  // turn a record-page request into an unbounded graph crawl.
-  const graphSecondHop = await platform.env.DB.prepare(`
+  const graphSecondHop = await db.prepare(`
     WITH direct AS (
       SELECT CASE WHEN subject_entity_id = ?1 THEN object_entity_id ELSE subject_entity_id END AS entity_id
-      FROM relationships
-      WHERE subject_entity_id = ?1 OR object_entity_id = ?1
-      ORDER BY id
-      LIMIT 36
+      FROM relationships WHERE subject_entity_id = ?1 OR object_entity_id = ?1 ORDER BY id LIMIT 36
     )
-    SELECT r.id, r.predicate,
-      r.subject_entity_id AS subject_id,
-      se.canonical_name AS subject_name,
-      se.entity_type AS subject_type,
-      r.object_entity_id AS object_id,
-      oe.canonical_name AS object_name,
-      oe.entity_type AS object_type,
-      sgr.entity_id AS subject_gets_rfx_entity_id,
-      sgs.entity_id AS subject_gets_supplier_entity_id,
-      ogr.entity_id AS object_gets_rfx_entity_id,
-      ogs.entity_id AS object_gets_supplier_entity_id,
+    SELECT r.id, r.predicate, r.subject_entity_id AS subject_id, se.canonical_name AS subject_name, se.entity_type AS subject_type,
+      r.object_entity_id AS object_id, oe.canonical_name AS object_name, oe.entity_type AS object_type,
+      sgr.entity_id AS subject_gets_rfx_entity_id, sgs.entity_id AS subject_gets_supplier_entity_id,
+      ogr.entity_id AS object_gets_rfx_entity_id, ogs.entity_id AS object_gets_supplier_entity_id,
       s.dataset, s.publisher, s.record_id, s.source_url
     FROM relationships r
     JOIN direct d ON d.entity_id = r.subject_entity_id OR d.entity_id = r.object_entity_id
-    JOIN entities se ON se.id = r.subject_entity_id
-    JOIN entities oe ON oe.id = r.object_entity_id
-    LEFT JOIN gets_rfx_records sgr ON sgr.entity_id = se.id
-    LEFT JOIN gets_supplier_records sgs ON sgs.entity_id = se.id
-    LEFT JOIN gets_rfx_records ogr ON ogr.entity_id = oe.id
-    LEFT JOIN gets_supplier_records ogs ON ogs.entity_id = oe.id
+    JOIN entities se ON se.id = r.subject_entity_id JOIN entities oe ON oe.id = r.object_entity_id
+    LEFT JOIN gets_rfx_records sgr ON sgr.entity_id = se.id LEFT JOIN gets_supplier_records sgs ON sgs.entity_id = se.id
+    LEFT JOIN gets_rfx_records ogr ON ogr.entity_id = oe.id LEFT JOIN gets_supplier_records ogs ON ogs.entity_id = oe.id
     JOIN sources s ON s.id = r.source_id
-    WHERE r.subject_entity_id != ?1 AND r.object_entity_id != ?1
-    ORDER BY r.id
-    LIMIT 180
+    WHERE r.subject_entity_id != ?1 AND r.object_entity_id != ?1 ORDER BY r.id LIMIT 180
   `).bind(id).all();
 
-  const getsRfx = (await getsFirst(platform.env.DB, `
-    SELECT * FROM gets_rfx_records WHERE entity_id = ?1
-  `, id)) as Record<string, any> | null;
+  const secondHopByDirect = new Map<number, unknown[]>();
+  for (const raw of graphSecondHop.results as Record<string, any>[]) {
+    for (const directId of [Number(raw.subject_id), Number(raw.object_id)]) {
+      if (!connections.results.some((c: any) => Number(c.connected_id) === directId)) continue;
+      const bucket = secondHopByDirect.get(directId) ?? [];
+      bucket.push(raw); secondHopByDirect.set(directId, bucket);
+    }
+  }
+  const graphConnections = (connections.results as Record<string, any>[]).map((c) => ({ ...c, graph_second_hop: secondHopByDirect.get(Number(c.connected_id)) ?? [] }));
 
-  const getsSupplier = (await getsFirst(platform.env.DB, `
-    SELECT * FROM gets_supplier_records WHERE entity_id = ?1
-  `, id)) as Record<string, any> | null;
-
-  let getsRegions: unknown[] = [];
-  let getsCategories: unknown[] = [];
-  let getsSuppliers: unknown[] = [];
-  let getsRelatedRfx: unknown[] = [];
-  let getsAgency = false;
-  let sourceEvidence: unknown = null;
+  const getsRfx = (await getsFirst(db, `SELECT * FROM gets_rfx_records WHERE entity_id = ?1`, id)) as Record<string, any> | null;
+  const getsSupplier = (await getsFirst(db, `SELECT * FROM gets_supplier_records WHERE entity_id = ?1`, id)) as Record<string, any> | null;
+  let getsRegions: unknown[] = [], getsCategories: unknown[] = [], getsSuppliers: unknown[] = [], getsRelatedRfx: unknown[] = [];
+  let getsAgency = false; let sourceEvidence: unknown = null;
 
   if (getsRfx) {
-    getsRegions = await getsAll(platform.env.DB, `
-      SELECT region FROM gets_rfx_regions WHERE rfx_id = ?1 ORDER BY region
-    `, getsRfx.rfx_id);
-    getsCategories = await getsAll(platform.env.DB, `
-      SELECT unspsc_code, unspsc_description FROM gets_rfx_unspsc_categories WHERE rfx_id = ?1 ORDER BY unspsc_code, unspsc_description
-    `, getsRfx.rfx_id);
-    getsSuppliers = await getsAll(platform.env.DB, `
-      SELECT g.business_name, g.nzbn_quality, g.raw_supplier_nzbn, e.id AS entity_id
-      FROM gets_supplier_records g
-      JOIN entities e ON e.id = g.entity_id
-      WHERE g.rfx_id = ?1
-      ORDER BY g.row_ordinal_for_rfx
-    `, getsRfx.rfx_id);
-    sourceEvidence = await getsFirst(platform.env.DB, `
-      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
-      FROM relationships r
-      JOIN sources s ON s.id = r.source_id
-      WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-      ORDER BY s.retrieved_at DESC
-      LIMIT 1
-    `, id);
+    getsRegions = await getsAll(db, `SELECT region FROM gets_rfx_regions WHERE rfx_id = ?1 ORDER BY region`, getsRfx.rfx_id);
+    getsCategories = await getsAll(db, `SELECT unspsc_code, unspsc_description FROM gets_rfx_unspsc_categories WHERE rfx_id = ?1 ORDER BY unspsc_code, unspsc_description`, getsRfx.rfx_id);
+    getsSuppliers = await getsAll(db, `SELECT g.business_name, g.nzbn_quality, g.raw_supplier_nzbn, e.id AS entity_id FROM gets_supplier_records g JOIN entities e ON e.id = g.entity_id WHERE g.rfx_id = ?1 ORDER BY g.row_ordinal_for_rfx`, getsRfx.rfx_id);
+    sourceEvidence = await getsFirst(db, `SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence FROM relationships r JOIN sources s ON s.id = r.source_id WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1 ORDER BY s.retrieved_at DESC LIMIT 1`, id);
   }
-
   if (getsSupplier) {
-    getsRelatedRfx = await getsAll(platform.env.DB, `
-      SELECT g.rfx_id, g.title, g.award_type, e.id AS entity_id
-      FROM gets_rfx_records g
-      JOIN entities e ON e.id = g.entity_id
-      WHERE g.rfx_id = ?1
-    `, getsSupplier.rfx_id);
-    sourceEvidence = await getsFirst(platform.env.DB, `
-      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
-      FROM relationships r
-      JOIN sources s ON s.id = r.source_id
-      WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-      ORDER BY s.retrieved_at DESC
-      LIMIT 1
-    `, id);
+    getsRelatedRfx = await getsAll(db, `SELECT g.rfx_id, g.title, g.award_type, e.id AS entity_id FROM gets_rfx_records g JOIN entities e ON e.id = g.entity_id WHERE g.rfx_id = ?1`, getsSupplier.rfx_id);
+    sourceEvidence = await getsFirst(db, `SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence FROM relationships r JOIN sources s ON s.id = r.source_id WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1 ORDER BY s.retrieved_at DESC LIMIT 1`, id);
   }
+  getsAgency = !!(await getsFirst(db, `SELECT 1 FROM gets_rfx_records WHERE agency_entity_id = ?1 LIMIT 1`, id));
 
-  getsAgency = !!(await getsFirst(platform.env.DB, `
-    SELECT 1 FROM gets_rfx_records WHERE agency_entity_id = ?1 LIMIT 1
-  `, id));
-
-  return {
-    entity,
-    connections: connections.results,
-    graphSecondHop: graphSecondHop.results,
-    gets: {
-      rfx: getsRfx,
-      supplier: getsSupplier,
-      regions: getsRegions,
-      categories: getsCategories,
-      suppliers: getsSuppliers,
-      relatedRfx: getsRelatedRfx,
-      agency: getsAgency,
-      sourceEvidence
-    }
-  };
+  return { entity, connections: graphConnections, gets: { rfx: getsRfx, supplier: getsSupplier, regions: getsRegions, categories: getsCategories, suppliers: getsSuppliers, relatedRfx: getsRelatedRfx, agency: getsAgency, sourceEvidence } };
 };
