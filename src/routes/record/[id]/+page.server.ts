@@ -57,6 +57,43 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     LIMIT 250
   `).bind(id).all();
 
+  // Graph-only second hop. This deliberately starts from the direct neighbours above,
+  // preserves provenance on every edge, and is capped so high-degree agencies cannot
+  // turn a record-page request into an unbounded graph crawl.
+  const graphSecondHop = await platform.env.DB.prepare(`
+    WITH direct AS (
+      SELECT CASE WHEN subject_entity_id = ?1 THEN object_entity_id ELSE subject_entity_id END AS entity_id
+      FROM relationships
+      WHERE subject_entity_id = ?1 OR object_entity_id = ?1
+      ORDER BY id
+      LIMIT 36
+    )
+    SELECT r.id, r.predicate,
+      r.subject_entity_id AS subject_id,
+      se.canonical_name AS subject_name,
+      se.entity_type AS subject_type,
+      r.object_entity_id AS object_id,
+      oe.canonical_name AS object_name,
+      oe.entity_type AS object_type,
+      sgr.entity_id AS subject_gets_rfx_entity_id,
+      sgs.entity_id AS subject_gets_supplier_entity_id,
+      ogr.entity_id AS object_gets_rfx_entity_id,
+      ogs.entity_id AS object_gets_supplier_entity_id,
+      s.dataset, s.publisher, s.record_id, s.source_url
+    FROM relationships r
+    JOIN direct d ON d.entity_id = r.subject_entity_id OR d.entity_id = r.object_entity_id
+    JOIN entities se ON se.id = r.subject_entity_id
+    JOIN entities oe ON oe.id = r.object_entity_id
+    LEFT JOIN gets_rfx_records sgr ON sgr.entity_id = se.id
+    LEFT JOIN gets_supplier_records sgs ON sgs.entity_id = se.id
+    LEFT JOIN gets_rfx_records ogr ON ogr.entity_id = oe.id
+    LEFT JOIN gets_supplier_records ogs ON ogs.entity_id = oe.id
+    JOIN sources s ON s.id = r.source_id
+    WHERE r.subject_entity_id != ?1 AND r.object_entity_id != ?1
+    ORDER BY r.id
+    LIMIT 180
+  `).bind(id).all();
+
   const getsRfx = (await getsFirst(platform.env.DB, `
     SELECT * FROM gets_rfx_records WHERE entity_id = ?1
   `, id)) as Record<string, any> | null;
@@ -120,6 +157,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   return {
     entity,
     connections: connections.results,
+    graphSecondHop: graphSecondHop.results,
     gets: {
       rfx: getsRfx,
       supplier: getsSupplier,
