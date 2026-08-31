@@ -45,8 +45,12 @@ export const load: PageServerLoad = async ({ params, platform }) => {
 
   const graphSecondHop = await db.prepare(`
     WITH direct AS (
-      SELECT CASE WHEN subject_entity_id = ?1 THEN object_entity_id ELSE subject_entity_id END AS entity_id
-      FROM relationships WHERE subject_entity_id = ?1 OR object_entity_id = ?1 ORDER BY id LIMIT 36
+      SELECT CASE WHEN r.subject_entity_id = ?1 THEN r.object_entity_id ELSE r.subject_entity_id END AS entity_id,
+        r.predicate, e.canonical_name
+      FROM relationships r
+      JOIN entities e ON e.id = CASE WHEN r.subject_entity_id = ?1 THEN r.object_entity_id ELSE r.subject_entity_id END
+      WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
+      ORDER BY r.predicate, e.canonical_name LIMIT 24
     )
     SELECT r.id, r.predicate, r.subject_entity_id AS subject_id, se.canonical_name AS subject_name, se.entity_type AS subject_type,
       r.object_entity_id AS object_id, oe.canonical_name AS object_name, oe.entity_type AS object_type,
