@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { goto } from '$app/navigation';
+  import { afterNavigate, goto } from '$app/navigation';
   import { findDemoEntities } from '$lib/demo';
   import SiteHeader from '$lib/SiteHeader.svelte';
 
@@ -37,36 +37,42 @@
   }
 
   async function runSearchFor(q: string, nextPage: number) {
-    pageNum = Math.max(1, nextPage);
+    const targetPage = Math.max(1, nextPage);
+    pageNum = targetPage;
     if (q.length < 2) {
-      results = findDemoEntities(q);
-      total = results.length;
+      const demoResults = findDemoEntities(q);
+      results = demoResults;
+      total = demoResults.length;
       totalPages = 1;
       mode = 'demo';
       return;
     }
     loading = true;
     try {
-      const params = new URLSearchParams({ q, page: String(pageNum), pageSize: String(pageSize) });
+      const params = new URLSearchParams({ q, page: String(targetPage), pageSize: String(pageSize) });
       const response = await fetch(`/api/search?${params.toString()}`);
       if (response.ok) {
         const payload = await response.json();
         if (Array.isArray(payload.results)) {
-          results = payload.results;
-          total = Number(payload.total ?? results.length);
-          totalPages = Math.max(1, Number(payload.totalPages ?? 1));
-          pageNum = Math.max(1, Math.min(Number(payload.page ?? pageNum), totalPages));
+          const liveResults = payload.results;
+          const liveTotalPages = Math.max(1, Number(payload.totalPages ?? 1));
+          results = liveResults;
+          total = Number(payload.total ?? liveResults.length);
+          totalPages = liveTotalPages;
+          pageNum = Math.max(1, Math.min(Number(payload.page ?? targetPage), liveTotalPages));
           mode = 'live';
           return;
         }
       }
-      results = findDemoEntities(q);
-      total = results.length;
+      const demoResults = findDemoEntities(q);
+      results = demoResults;
+      total = demoResults.length;
       totalPages = 1;
       mode = 'demo';
     } catch {
-      results = findDemoEntities(q);
-      total = results.length;
+      const demoResults = findDemoEntities(q);
+      results = demoResults;
+      total = demoResults.length;
       totalPages = 1;
       mode = 'demo';
     } finally {
@@ -103,14 +109,16 @@
     return `Showing ${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()} results`;
   }
 
-  $effect(() => {
-    page.url.href;
+  async function syncFromUrl() {
     if (page.url.pathname !== '/explore') return;
     const nextQuery = readQueryFromUrl();
     const nextPage = readPageFromUrl();
     query = nextQuery;
-    pageNum = nextPage;
-    runSearchFor(nextQuery.trim(), nextPage);
+    await runSearchFor(nextQuery.trim(), nextPage);
+  }
+
+  afterNavigate(() => {
+    syncFromUrl();
   });
 </script>
 
