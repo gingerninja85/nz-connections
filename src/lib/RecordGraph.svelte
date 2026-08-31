@@ -13,6 +13,10 @@
   function directPos(i:number,n:number){const a=(i/Math.max(n,1))*Math.PI*2-Math.PI/2;return{x:cx+Math.cos(a)*230,y:cy+Math.sin(a)*175};}
   function secondPos(i:number,n:number){const a=(i/Math.max(n,1))*Math.PI*2-Math.PI/2+.06;return{x:cx+Math.cos(a)*425,y:cy+Math.sin(a)*270};}
   function dpos(id:number){const i=direct.findIndex((c:any)=>Number(c.connected_id)===id);return directPos(Math.max(i,0),direct.length);}
+  function selectSecond(n:any,k:string){selected={id:n.id,name:n.name,predicate:n.edge.predicate,kind:k,source:n.edge};}
+  function selectDirect(c:any,k:string){selected={id:c.connected_id,name:c.connected_name,predicate:c.predicate,kind:k,source:c};}
+  function keySecond(e:KeyboardEvent,n:any,k:string){if(e.key==='Enter'||e.key===' '){e.preventDefault();selectSecond(n,k);}}
+  function keyDirect(e:KeyboardEvent,c:any,k:string){if(e.key==='Enter'||e.key===' '){e.preventDefault();selectDirect(c,k);}}
 </script>
 <section class="graph-section">
   <div class="graph-head"><div><p class="eyebrow">Relationship explorer</p><h2>Graph view</h2></div><div class="view-note">{direct.length} direct · {second.length} second-hop connections shown</div></div>
@@ -23,8 +27,8 @@
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Relationship graph for ${entity.canonical_name}`}>
         {#if depth===2}{#each second as n,i}{@const a=dpos(n.parent)}{@const b=secondPos(i,second.length)}<line class="second-edge" x1={a.x} y1={a.y} x2={b.x} y2={b.y}/>{/each}{/if}
         {#each direct as c,i}{@const p=directPos(i,direct.length)}<line class="direct-edge" x1={cx} y1={cy} x2={p.x} y2={p.y}/>{/each}
-        {#if depth===2}{#each second as n,i}{@const p=secondPos(i,second.length)}{@const k=kind2(n)}<g class="node secondary" role="link" tabindex="0" onclick={()=>selected={id:n.id,name:n.name,predicate:n.edge.predicate,kind:k,source:n.edge}} onkeydown={(e)=>{if(e.key==='Enter')selected={id:n.id,name:n.name,predicate:n.edge.predicate,kind:k,source:n.edge}}><circle cx={p.x} cy={p.y} r="8" fill={fill(k)}/>{#if showLabels}<text x={p.x} y={p.y+21} text-anchor="middle">{short(clean(n.name),20)}</text>{/if}</g>{/each}{/if}
-        {#each direct as c,i}{@const p=directPos(i,direct.length)}{@const k=kindDirect(c)}<g class="node" role="link" tabindex="0" onclick={()=>selected={id:c.connected_id,name:c.connected_name,predicate:c.predicate,kind:k,source:c}} onkeydown={(e)=>{if(e.key==='Enter')selected={id:c.connected_id,name:c.connected_name,predicate:c.predicate,kind:k,source:c}}><circle cx={p.x} cy={p.y} r="11" fill={fill(k)}/>{#if showLabels}<text x={p.x} y={p.y+25} text-anchor="middle">{short(clean(c.connected_name))}</text>{/if}</g>{/each}
+        {#if depth===2}{#each second as n,i}{@const p=secondPos(i,second.length)}{@const k=kind2(n)}<g class="node secondary" role="link" tabindex="0" onclick={()=>selectSecond(n,k)} onkeydown={(e)=>keySecond(e,n,k)}><circle cx={p.x} cy={p.y} r="8" fill={fill(k)}/>{#if showLabels}<text x={p.x} y={p.y+21} text-anchor="middle">{short(clean(n.name),20)}</text>{/if}</g>{/each}{/if}
+        {#each direct as c,i}{@const p=directPos(i,direct.length)}{@const k=kindDirect(c)}<g class="node" role="link" tabindex="0" onclick={()=>selectDirect(c,k)} onkeydown={(e)=>keyDirect(e,c,k)}><circle cx={p.x} cy={p.y} r="11" fill={fill(k)}/>{#if showLabels}<text x={p.x} y={p.y+25} text-anchor="middle">{short(clean(c.connected_name))}</text>{/if}</g>{/each}
         <g class="center"><circle cx={cx} cy={cy} r="22"/><circle cx={cx} cy={cy} r="30" class="halo"/><text x={cx} y={cy+48} text-anchor="middle">{short(entity.canonical_name,38)}</text></g>
       </svg>{/if}
     </div>
