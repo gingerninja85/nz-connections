@@ -12,13 +12,9 @@ CREATE TABLE IF NOT EXISTS entities (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(canonical_name);
 CREATE INDEX IF NOT EXISTS idx_entities_nzbn ON entities(nzbn);
 CREATE INDEX IF NOT EXISTS idx_entities_company_number ON entities(company_number);
--- NZBN is indexed for matching but is deliberately not unique here. A public
--- source may contain multiple register records carrying the same NZBN; entity
--- reconciliation is a separate evidence-backed process, not an ingest rule.
 DROP INDEX IF EXISTS idx_entities_unique_nzbn;
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -33,9 +29,7 @@ CREATE TABLE IF NOT EXISTS sources (
   importer_version TEXT,
   raw_hash TEXT
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_identity
-ON sources(dataset, COALESCE(record_id, ''), source_url);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_identity ON sources(dataset, COALESCE(record_id, ''), source_url);
 
 CREATE TABLE IF NOT EXISTS entity_sources (
   entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
@@ -96,10 +90,6 @@ CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
   INSERT INTO entity_search(entity_search,rowid,canonical_name,entity_type,nzbn,company_number) VALUES('delete',old.id,old.canonical_name,old.entity_type,old.nzbn,old.company_number);
   INSERT INTO entity_search(rowid,canonical_name,entity_type,nzbn,company_number) VALUES(new.id,new.canonical_name,new.entity_type,new.nzbn,new.company_number);
 END;
-
--- MBIE/GETS local integration extension.
--- Non-destructive source-ingestion layer for local validation. Regions and
--- UNSPSC remain structured source associations, not graph entities.
 
 CREATE TABLE IF NOT EXISTS gets_rfx_records (
   rfx_id TEXT PRIMARY KEY,
@@ -173,3 +163,21 @@ CREATE TABLE IF NOT EXISTS gets_rfx_unspsc_categories (
   PRIMARY KEY (rfx_id, unspsc_code, source_line_number)
 );
 CREATE INDEX IF NOT EXISTS idx_gets_unspsc_code ON gets_rfx_unspsc_categories(unspsc_code);
+
+-- Narrative/detail fields captured from the public individual GETS tender page.
+-- This is deliberately separate from the MBIE bulk award dataset so provenance
+-- remains explicit and enrichment can be refreshed independently.
+CREATE TABLE IF NOT EXISTS gets_rfx_detail_enrichment (
+  rfx_id TEXT PRIMARY KEY REFERENCES gets_rfx_records(rfx_id) ON DELETE CASCADE,
+  gets_url TEXT NOT NULL,
+  overview_text TEXT,
+  tender_name TEXT,
+  tender_type_text TEXT,
+  tender_coverage TEXT,
+  contact_text TEXT,
+  outcome_text TEXT,
+  fetched_at TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  parser_version TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gets_detail_fetched_at ON gets_rfx_detail_enrichment(fetched_at);
