@@ -4,8 +4,9 @@
   const path = $derived(page.url.pathname);
   const directoryKind = $derived(page.url.searchParams.get('kind'));
   const isSearch = $derived(path === '/explore');
-  const isCharities = $derived(path === '/directory' && directoryKind !== 'officers');
+  const isCharities = $derived(path === '/directory' && (directoryKind === null || directoryKind === 'charities'));
   const isOfficers = $derived(path === '/directory' && directoryKind === 'officers');
+  const isProcurement = $derived(path === '/directory' && directoryKind === 'procurement');
 </script>
 
 <header>
@@ -15,6 +16,7 @@
       <a class:active={isSearch} aria-current={isSearch ? 'page' : undefined} href="/explore">Search</a>
       <a class:active={isCharities} aria-current={isCharities ? 'page' : undefined} href="/directory?kind=charities&letter=A">Charities</a>
       <a class:active={isOfficers} aria-current={isOfficers ? 'page' : undefined} href="/directory?kind=officers&letter=A">Officer records</a>
+      <a class:active={isProcurement} aria-current={isProcurement ? 'page' : undefined} href="/directory?kind=procurement&page=1">Government tenders</a>
       <a class:active={path === '/' && page.url.hash === '#about'} href="/#about">About</a>
     </nav>
   </div>
