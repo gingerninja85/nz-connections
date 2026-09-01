@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 /** Charities Services OData -> NZ Connections SQL importer. */
+import { buildCharityRegisterUrl } from './charity-source-url.mjs';
 const BASE = 'http://www.odata.charities.govt.nz';
 const PUBLISHER = 'Charities Services, Department of Internal Affairs';
 const DATASET = 'charities-register';
@@ -25,7 +26,8 @@ for (const org of organisations) {
   const nzbn=pick(org,'NZBN','Nzbn','NZBNNumber'); const status=pick(org,'RegistrationStatus');
   const stableSlug=`charity-${slugify(registration)}`;
   const oldSlug=`charity-${slugify(registration)}-${slugify(name)}`;
-  const sourceUrl=`https://register.charities.govt.nz/CharitiesRegister/ViewCharity?search=1&charityRegistrationNumber=${encodeURIComponent(registration)}`;
+  const sourceUrl=buildCharityRegisterUrl(registration);
+  if(!sourceUrl) continue;
   const metadata={charity_registration_number:registration,organisation_id:pick(org,'OrganisationId','OrganisationID','Id','ID'),date_registered:pick(org,'DateRegistered'),deregistration_date:pick(org,'DeregistrationDate','deregistrationdate'),entity_type:pick(org,'EntityType'),town_city:pick(org,'TownCity','PostalAddress_TownCity'),source_dataset:'Charities Register'};
   // Migrate our earlier canary slug in-place so reimports retain the same entity id.
   console.log(`UPDATE entities SET slug=${sql(stableSlug)}, canonical_name=${sql(name)}, nzbn=COALESCE(${sql(nzbn)},nzbn), status=${sql(status)}, metadata_json=${sql(JSON.stringify(metadata))}, updated_at=CURRENT_TIMESTAMP WHERE entity_type='charity' AND (slug=${sql(oldSlug)} OR json_extract(metadata_json,'$.charity_registration_number')=${sql(registration)});`);
