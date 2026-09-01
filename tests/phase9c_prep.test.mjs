@@ -10,7 +10,10 @@ import {
   buildSqlChunks,
   planODataPages,
   detectRepeatedContinuation,
-  buildSnapshotManifest
+  buildSnapshotManifest,
+  writeNdjson,
+  readNdjson,
+  writeChunks
 } from '../importers/charities/phase9c-prep.mjs';
 
 const charities = [
@@ -117,4 +120,36 @@ test('generated SQL applies twice to local SQLite without duplicate graph rows',
   assert.match(out[1], /\('charity', 3\)/);
   assert.match(out[1], /\('other', 1\)/);
   assert.match(out[1], /\('person', 2\)/);
+});
+
+test('writeNdjson streams rows without building one giant output string', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'phase9c-ndjson-'));
+  const file = path.join(tmp, 'rows.ndjson');
+  const rows = Array.from({ length: 5000 }, (_, i) => ({ id: i, value: `row-${i}` }));
+  writeNdjson(file, rows);
+  const loaded = readNdjson(file);
+  assert.equal(loaded.length, rows.length);
+  assert.deepEqual(loaded.at(0), rows[0]);
+  assert.deepEqual(loaded.at(-1), rows.at(-1));
+});
+
+test('writeChunks streams accepted files to deterministic chunk files', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'phase9c-chunks-'));
+  const acceptedCharities = validateCharityRows(charities).accepted;
+  const acceptedOfficers = validateOfficerRows([
+    { OfficerId: 10, ContactId: 'c1', OrganisationId: 1, FullName: 'John Wilson', OfficerStatus: 'Qualified', PositioninOrganisation: 'Trustee' },
+    { OfficerId: 11, ContactId: 'c2', OrganisationId: 2, FullName: 'John Wilson', OfficerStatus: 'Past', PositioninOrganisation: 'Chair', LastDateAsAnOfficer: '2021-01-01T00:00:00Z' }
+  ], acceptedCharities).accepted;
+  const charitiesFile = path.join(tmp, 'charities.accepted.ndjson');
+  const officersFile = path.join(tmp, 'officers.accepted.ndjson');
+  writeNdjson(charitiesFile, acceptedCharities);
+  writeNdjson(officersFile, acceptedOfficers);
+  const outDir = path.join(tmp, 'chunks');
+  const manifest = await writeChunks({ acceptedCharitiesFile: charitiesFile, acceptedOfficersFile: officersFile, outDir, chunkSize: 2, snapshotId: 'fixture' });
+  assert.equal(manifest.chunkCount, 3);
+  assert.equal(fs.readdirSync(outDir).filter((n) => n.endsWith('.sql')).length, 3);
+  assert.equal(manifest.expectedTotals.entities, 5);
+  assert.equal(manifest.expectedTotals.relationships, 2);
+  const manifestAgain = await writeChunks({ acceptedCharitiesFile: charitiesFile, acceptedOfficersFile: officersFile, outDir: path.join(tmp, 'chunks-again'), chunkSize: 2, snapshotId: 'fixture' });
+  assert.deepEqual(manifestAgain.chunks.map((c) => c.fingerprint), manifest.chunks.map((c) => c.fingerprint));
 });

@@ -143,8 +143,11 @@ vite.config.ts.timestamp-*
 .vite/
 # Phase 9C full-corpus local snapshots/generated import artifacts
 phase9c-prep/snapshots/
-phase9c-prep/validation/*.ndjson
+phase9c-prep/validation/
 phase9c-prep/chunks/
+phase9c-prep/chunks-determinism/
+phase9c-prep/rehearsals/
+phase9c-prep/.latest-rehearsal-dir
 phase9c-prep/local-db/
 phase9c-prep/**/*.sqlite
 phase9c-prep/**/*.db

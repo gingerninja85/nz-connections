@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { buildCharityRegisterUrl, isValidCharityRegistrationNumber, normalizeCharityRegistrationNumber } from './charity-source-url.mjs';
 
@@ -139,7 +140,12 @@ export function readNdjson(file) {
 }
 export function writeNdjson(file, rows) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, rows.map((r) => stableJson(r)).join('\n') + (rows.length ? '\n' : ''));
+  const fd = fs.openSync(file, 'w');
+  try {
+    for (const row of rows) fs.writeSync(fd, `${stableJson(row)}\n`);
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 export function buildSnapshotManifest({ dataset, endpoint, rows, pageSize, pages }) {
   return { dataset, endpoint, retrievedAt: new Date().toISOString(), rowCount: rows.length, pageSize, pages, sha256: fingerprintRows(rows), remoteWritesEnabled: false };
@@ -223,7 +229,7 @@ function charitySql(c, snapshotId) {
   return [
     `INSERT INTO entities(entity_type, canonical_name, slug, nzbn, company_number, status, metadata_json, updated_at) VALUES ('charity', ${sql(c.name)}, ${sql(c.slug)}, ${sql(c.nzbn)}, ${sql(c.companiesOfficeNumber)}, ${sql(c.status)}, ${sql(JSON.stringify(metadata))}, CURRENT_TIMESTAMP) ON CONFLICT(slug) DO UPDATE SET canonical_name=excluded.canonical_name,nzbn=excluded.nzbn,company_number=excluded.company_number,status=excluded.status,metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP;`,
     `INSERT INTO sources(dataset, publisher, record_id, source_url, retrieved_at, licence, importer_version, raw_hash) VALUES (${sql(CHARITY_DATASET)}, ${sql(PUBLISHER)}, ${sql(c.registration)}, ${sql(c.sourceUrl)}, CURRENT_TIMESTAMP, ${sql(LICENCE)}, 'charities-odata-phase9c', ${sql(sha256Text(stableJson(c.raw)))}) ON CONFLICT DO NOTHING;`,
-    `INSERT INTO entity_sources(entity_id, source_id, metadata_json) SELECT e.id, s.id, ${sql(JSON.stringify({ role: 'register-record', snapshot_id: snapshotId }))} FROM entities e JOIN sources s ON s.dataset=${sql(CHARITY_DATASET)} AND s.record_id=${sql(c.registration)} WHERE e.slug=${sql(c.slug)} ON CONFLICT(entity_id,source_id) DO UPDATE SET metadata_json=excluded.metadata_json;`
+    `INSERT INTO entity_sources(entity_id, source_id, metadata_json) SELECT e.id, s.id, ${sql(JSON.stringify({ role: 'register-record', snapshot_id: snapshotId }))} FROM entities e JOIN sources s ON s.dataset=${sql(CHARITY_DATASET)} AND COALESCE(s.record_id, '')=${sql(c.registration)} AND s.source_url=${sql(c.sourceUrl)} WHERE e.slug=${sql(c.slug)} ON CONFLICT(entity_id,source_id) DO UPDATE SET metadata_json=excluded.metadata_json;`
   ];
 }
 function officerSql(o, snapshotId) {
@@ -232,8 +238,8 @@ function officerSql(o, snapshotId) {
   return [
     `INSERT INTO entities(entity_type, canonical_name, slug, status, metadata_json, updated_at) VALUES (${sql(o.entityType)}, ${sql(o.name)}, ${sql(o.slug)}, ${sql(o.status)}, ${sql(JSON.stringify(metadata))}, CURRENT_TIMESTAMP) ON CONFLICT(slug) DO UPDATE SET canonical_name=excluded.canonical_name,status=excluded.status,metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP;`,
     `INSERT INTO sources(dataset, publisher, record_id, source_url, retrieved_at, licence, importer_version, raw_hash) VALUES (${sql(OFFICER_DATASET)}, ${sql(PUBLISHER)}, ${sql(o.officerId)}, ${sql(o.sourceUrl)}, CURRENT_TIMESTAMP, ${sql(LICENCE)}, 'charities-officers-phase9c', ${sql(sha256Text(stableJson(o.raw)))}) ON CONFLICT DO NOTHING;`,
-    `INSERT INTO entity_sources(entity_id, source_id, metadata_json) SELECT e.id, s.id, ${sql(JSON.stringify({ role: 'officer-register-record', snapshot_id: snapshotId }))} FROM entities e JOIN sources s ON s.dataset=${sql(OFFICER_DATASET)} AND s.record_id=${sql(o.officerId)} WHERE e.slug=${sql(o.slug)} ON CONFLICT(entity_id,source_id) DO UPDATE SET metadata_json=excluded.metadata_json;`,
-    `INSERT INTO relationships(subject_entity_id, predicate, object_entity_id, source_id, valid_from, valid_to, observed_at, metadata_json) SELECT p.id, 'OFFICER_OF', c.id, s.id, ${sql(o.appointmentDate)}, ${sql(o.lastDateAsOfficer)}, CURRENT_TIMESTAMP, ${sql(JSON.stringify(relMeta))} FROM entities p, entities c, sources s WHERE p.slug=${sql(o.slug)} AND c.slug=${sql(o.charitySlug)} AND s.dataset=${sql(OFFICER_DATASET)} AND s.record_id=${sql(o.officerId)} ON CONFLICT DO NOTHING;`
+    `INSERT INTO entity_sources(entity_id, source_id, metadata_json) SELECT e.id, s.id, ${sql(JSON.stringify({ role: 'officer-register-record', snapshot_id: snapshotId }))} FROM entities e JOIN sources s ON s.dataset=${sql(OFFICER_DATASET)} AND COALESCE(s.record_id, '')=${sql(o.officerId)} AND s.source_url=${sql(o.sourceUrl)} WHERE e.slug=${sql(o.slug)} ON CONFLICT(entity_id,source_id) DO UPDATE SET metadata_json=excluded.metadata_json;`,
+    `INSERT INTO relationships(subject_entity_id, predicate, object_entity_id, source_id, valid_from, valid_to, observed_at, metadata_json) SELECT p.id, 'OFFICER_OF', c.id, s.id, ${sql(o.appointmentDate)}, ${sql(o.lastDateAsOfficer)}, CURRENT_TIMESTAMP, ${sql(JSON.stringify(relMeta))} FROM entities p, entities c, sources s WHERE p.slug=${sql(o.slug)} AND c.slug=${sql(o.charitySlug)} AND s.dataset=${sql(OFFICER_DATASET)} AND COALESCE(s.record_id, '')=${sql(o.officerId)} AND s.source_url=${sql(o.sourceUrl)} ON CONFLICT DO NOTHING;`
   ];
 }
 export function buildSqlChunks({ charities = [], officers = [], chunkSize = 1000, snapshotId = 'unknown' }) {
@@ -266,13 +272,42 @@ export function writeValidationOutputs({ organisationsFile, officersFile = null,
   fs.writeFileSync(path.join(outDir, 'validation-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
-export function writeChunks({ acceptedCharitiesFile, acceptedOfficersFile = null, outDir, chunkSize = 1000, snapshotId = 'unknown' }) {
+async function* readNdjsonStream(file) {
+  const rl = readline.createInterface({ input: fs.createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (line.trim()) yield JSON.parse(line);
+  }
+}
+function chunkFromUnits(part, chunkNumber, snapshotId) {
+  const totals = part.reduce((acc, u) => { for (const [k, v] of Object.entries(u.counts)) acc[k] = (acc[k] || 0) + v; return acc; }, {});
+  const sqlText = ['PRAGMA foreign_keys = ON;', importRunStart(`phase9c-chunk-${String(chunkNumber).padStart(5, '0')}`, snapshotId, part.length, { snapshot_id: snapshotId, chunk_number: chunkNumber, first_key: part[0]?.key, last_key: part.at(-1)?.key, local_only_generated: true }), ...part.flatMap((u) => u.statements), `UPDATE import_runs SET completed_at=CURRENT_TIMESTAMP,status='completed',rows_written=${Object.values(totals).reduce((a, b) => a + b, 0)} WHERE id=(SELECT MAX(id) FROM import_runs WHERE dataset=${sql(`phase9c-chunk-${String(chunkNumber).padStart(5, '0')}`)});`, ''].join('\n');
+  return { chunkNumber, firstKey: part[0]?.key, lastKey: part.at(-1)?.key, unitCount: part.length, expected: totals, fingerprint: sha256Text(sqlText), sql: sqlText };
+}
+export async function writeChunks({ acceptedCharitiesFile, acceptedOfficersFile = null, outDir, chunkSize = 1000, snapshotId = 'unknown' }) {
   fs.mkdirSync(outDir, { recursive: true });
-  const charities = readNdjson(acceptedCharitiesFile);
-  const officers = acceptedOfficersFile ? readNdjson(acceptedOfficersFile) : [];
-  const chunks = buildSqlChunks({ charities, officers, chunkSize, snapshotId });
-  const manifest = { generatedAt: new Date().toISOString(), remoteWritesEnabled: false, chunkSize, snapshotId, chunkCount: chunks.length, chunks: chunks.map(({ sql: _sql, ...rest }) => rest) };
-  for (const c of chunks) fs.writeFileSync(path.join(outDir, `chunk-${String(c.chunkNumber).padStart(5, '0')}.sql`), c.sql);
+  let part = [], chunkNumber = 1;
+  const manifestChunks = [];
+  async function flush(force = false) {
+    if (!part.length || (!force && part.length < chunkSize)) return;
+    const chunk = chunkFromUnits(part, chunkNumber++, snapshotId);
+    fs.writeFileSync(path.join(outDir, `chunk-${String(chunk.chunkNumber).padStart(5, '0')}.sql`), chunk.sql);
+    const { sql: _sql, ...meta } = chunk;
+    manifestChunks.push(meta);
+    part = [];
+  }
+  for await (const c of readNdjsonStream(acceptedCharitiesFile)) {
+    part.push({ key: `charity:${c.registration}`, kind: 'charity', statements: charitySql(c, snapshotId), counts: { entities: 1, sources: 1, entity_sources: 1, relationships: 0 } });
+    await flush(false);
+  }
+  if (acceptedOfficersFile) {
+    for await (const o of readNdjsonStream(acceptedOfficersFile)) {
+      part.push({ key: `officer:${o.officerId}`, kind: 'officer', statements: officerSql(o, snapshotId), counts: { entities: 1, sources: 1, entity_sources: 1, relationships: 1 } });
+      await flush(false);
+    }
+  }
+  await flush(true);
+  const totals = manifestChunks.reduce((acc, c) => { for (const [k, v] of Object.entries(c.expected)) acc[k] = (acc[k] || 0) + v; return acc; }, {});
+  const manifest = { generatedAt: new Date().toISOString(), remoteWritesEnabled: false, chunkSize, snapshotId, chunkCount: manifestChunks.length, expectedTotals: totals, chunks: manifestChunks };
   fs.writeFileSync(path.join(outDir, 'chunks-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
@@ -300,7 +335,7 @@ No command here executes D1 or production writes.`);
     return;
   }
   if (cmd === 'chunks') {
-    const manifest = writeChunks({ acceptedCharitiesFile: arg('charities'), acceptedOfficersFile: arg('officers'), outDir: arg('out-dir', 'phase9c-prep/chunks'), chunkSize: Number(arg('chunk-size', '1000')), snapshotId: arg('snapshot-id', 'manual') });
+    const manifest = await writeChunks({ acceptedCharitiesFile: arg('charities'), acceptedOfficersFile: arg('officers'), outDir: arg('out-dir', 'phase9c-prep/chunks'), chunkSize: Number(arg('chunk-size', '1000')), snapshotId: arg('snapshot-id', 'manual') });
     console.log(JSON.stringify(manifest, null, 2));
     return;
   }
