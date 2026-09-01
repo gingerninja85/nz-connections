@@ -17,7 +17,12 @@
     "db:local:setup": "npm run db:local:init && npm run db:local:seed",
     "nzbn:sql": "node importers/nzbn/to-sql.mjs",
     "charities:sql": "node importers/charities/to-sql.mjs",
-    "charities:officers:sql": "node importers/charities/officers-to-sql.mjs"
+    "charities:officers:sql": "node importers/charities/officers-to-sql.mjs",
+    "test:phase9c-prep": "node --test tests/phase9c_prep.test.mjs",
+    "charities:phase9c:snapshot:organisations": "node importers/charities/phase9c-prep.mjs snapshot --dataset=organisations --out=phase9c-prep/snapshots/organisations.ndjson --page-size=50000",
+    "charities:phase9c:snapshot:officers": "node importers/charities/phase9c-prep.mjs snapshot --dataset=officers --out=phase9c-prep/snapshots/officers.ndjson --page-size=50000",
+    "charities:phase9c:validate": "node importers/charities/phase9c-prep.mjs validate --organisations=phase9c-prep/snapshots/organisations.ndjson --officers=phase9c-prep/snapshots/officers.ndjson --out-dir=phase9c-prep/validation",
+    "charities:phase9c:chunks": "node importers/charities/phase9c-prep.mjs chunks --charities=phase9c-prep/validation/charities.accepted.ndjson --officers=phase9c-prep/validation/officers.accepted.ndjson --out-dir=phase9c-prep/chunks --chunk-size=1000 --snapshot-id=local-phase9c"
   },
   "devDependencies": {
     "@sveltejs/adapter-cloudflare": "latest",

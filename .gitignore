@@ -141,3 +141,14 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+# Phase 9C full-corpus local snapshots/generated import artifacts
+phase9c-prep/snapshots/
+phase9c-prep/validation/*.ndjson
+phase9c-prep/chunks/
+phase9c-prep/local-db/
+phase9c-prep/**/*.sqlite
+phase9c-prep/**/*.db
+phase9c-prep/smoke/
+phase9c-prep/*_raw.json
+__pycache__/
+**/__pycache__/
