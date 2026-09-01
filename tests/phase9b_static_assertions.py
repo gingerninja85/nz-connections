@@ -32,6 +32,28 @@ for (const bad of ['28520','cc28520','CC 28520',null,undefined]) if (buildCharit
 def test_importers_direct_url_only():
     for f in ['importers/charities/to-sql.mjs','importers/charities/officers-to-sql.mjs']:
         txt=read(f); assert 'buildCharityRegisterUrl' in txt and 'CharitiesRegister/ViewCharity' not in txt and 'encodeURIComponent(registration)' not in txt
+
+def test_record_loader_fetches_entity_evidence_for_non_gets_records():
+    txt=read('src/routes/record/[id]/+page.server.ts')
+    assert 'recordSourceEvidence' in txt
+    assert 'FROM entity_sources es' in txt
+    assert 'JOIN sources s ON s.id = es.source_id' in txt
+    assert 'WHERE es.entity_id = ?1' in txt
+    assert 'source_kind' in txt
+    assert 'recordSourceEvidence' in txt.split('return {', 1)[1]
+    # Entity-source evidence must not be hidden inside GETS-only branches.
+    before_gets_branch = txt.split('if (getsRfx)', 1)[0]
+    assert 'recordSourceEvidence = await' in before_gets_branch
+
+def test_record_page_separates_record_source_from_connection_evidence():
+    txt=read('src/routes/record/[id]/+page.svelte')
+    assert 'Source for this record' in txt
+    assert 'This record comes from the New Zealand Charities Register.' in txt
+    assert 'View charity register record' in txt
+    assert 'sourceEvidence.source_url' in txt
+    assert 'Evidence for this connection' in txt
+    assert '<summary>View source</summary>' not in txt
+    assert 'charities-register-officers' not in txt
 if __name__=='__main__':
     tests=[v for k,v in sorted(globals().items()) if k.startswith('test_')]
     fails=[]

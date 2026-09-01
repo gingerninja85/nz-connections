@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       e.id AS connected_id, e.canonical_name AS connected_name, e.entity_type AS connected_type, e.status AS connected_status, e.slug AS connected_slug, e.metadata_json AS connected_metadata_json,
       gr.entity_id AS connected_gets_rfx_entity_id,
       gs.entity_id AS connected_gets_supplier_entity_id,
-      s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
+      s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
     FROM relationships r
     JOIN entities e ON e.id = CASE WHEN r.subject_entity_id = ?1 THEN r.object_entity_id ELSE r.subject_entity_id END
     LEFT JOIN gets_rfx_records gr ON gr.entity_id = e.id
@@ -70,7 +70,15 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   let getsSuppliers: unknown[] = [];
   let getsRelatedRfx: unknown[] = [];
   let getsAgency = false;
-  let sourceEvidence: unknown = null;
+
+  const recordSourceEvidence = await platform.env.DB.prepare(`
+    SELECT CASE WHEN s.dataset = 'charities-register' THEN 'charity' ELSE 'public' END AS source_kind, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
+    FROM entity_sources es
+    JOIN sources s ON s.id = es.source_id
+    WHERE es.entity_id = ?1
+    ORDER BY s.retrieved_at DESC, s.id DESC
+    LIMIT 1
+  `).bind(id).first();
 
   if (getsRfx) {
     getsRegions = await getsAll(platform.env.DB, `
@@ -86,19 +94,6 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       WHERE g.rfx_id = ?1
       ORDER BY g.row_ordinal_for_rfx
     `, getsRfx.rfx_id);
-    sourceEvidence = await getsFirst(platform.env.DB, `
-      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
-      FROM entity_sources es
-      JOIN sources s ON s.id = es.source_id
-      WHERE es.entity_id = ?1
-      UNION ALL
-      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
-      FROM relationships r
-      JOIN sources s ON s.id = r.source_id
-      WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-      ORDER BY retrieved_at DESC
-      LIMIT 1
-    `, id);
   }
 
   if (getsSupplier) {
@@ -108,19 +103,6 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       JOIN entities e ON e.id = g.entity_id
       WHERE g.rfx_id = ?1
     `, getsSupplier.rfx_id);
-    sourceEvidence = await getsFirst(platform.env.DB, `
-      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
-      FROM entity_sources es
-      JOIN sources s ON s.id = es.source_id
-      WHERE es.entity_id = ?1
-      UNION ALL
-      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
-      FROM relationships r
-      JOIN sources s ON s.id = r.source_id
-      WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-      ORDER BY retrieved_at DESC
-      LIMIT 1
-    `, id);
   }
 
   getsAgency = !!(await getsFirst(platform.env.DB, `
@@ -137,8 +119,8 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       categories: getsCategories,
       suppliers: getsSuppliers,
       relatedRfx: getsRelatedRfx,
-      agency: getsAgency,
-      sourceEvidence
-    }
+      agency: getsAgency
+    },
+    sourceEvidence: recordSourceEvidence
   };
 };
