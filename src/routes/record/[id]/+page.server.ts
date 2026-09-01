@@ -15,14 +15,14 @@ export const load: PageServerLoad = async ({params,platform}) => {
  CASE WHEN r.subject_entity_id=?1 THEN 'out' ELSE 'in' END AS direction,
  e.id AS connected_id,e.canonical_name AS connected_name,e.entity_type AS connected_type,e.status AS connected_status,e.slug AS connected_slug,e.metadata_json AS connected_metadata_json,
  gr.entity_id AS connected_gets_rfx_entity_id,gs.entity_id AS connected_gets_supplier_entity_id,
- gr.rfx_id AS graph_rfx_id,gr.title AS graph_rfx_title,gr.rfx_type AS graph_rfx_type,gr.competition_type AS graph_competition_type,gr.posting_agency AS graph_posting_agency,gr.award_type AS graph_award_type,gr.awarded_amount_raw AS graph_awarded_amount_raw,
- gr.open_date AS graph_open_date,gr.close_date AS graph_close_date,gr.awarded_date AS graph_awarded_date,
- (SELECT group_concat(DISTINCT rr.region) FROM gets_rfx_regions rr WHERE rr.rfx_id=gr.rfx_id) AS graph_regions,
- (SELECT group_concat(DISTINCT rc.unspsc_description) FROM gets_rfx_unspsc_categories rc WHERE rc.rfx_id=gr.rfx_id AND trim(COALESCE(rc.unspsc_description,''))!='') AS graph_categories,
- (SELECT count(*) FROM gets_supplier_records sp WHERE sp.rfx_id=gr.rfx_id) AS graph_supplier_count,
+ COALESCE(gr.rfx_id,pr.rfx_id) AS graph_rfx_id,COALESCE(gr.title,pr.title) AS graph_rfx_title,COALESCE(gr.rfx_type,pr.rfx_type) AS graph_rfx_type,COALESCE(gr.competition_type,pr.competition_type) AS graph_competition_type,COALESCE(gr.posting_agency,pr.posting_agency) AS graph_posting_agency,COALESCE(gr.award_type,pr.award_type) AS graph_award_type,COALESCE(gr.awarded_amount_raw,pr.awarded_amount_raw) AS graph_awarded_amount_raw,
+ COALESCE(gr.open_date,pr.open_date) AS graph_open_date,COALESCE(gr.close_date,pr.close_date) AS graph_close_date,COALESCE(gr.awarded_date,pr.awarded_date) AS graph_awarded_date,
+ (SELECT group_concat(DISTINCT rr.region) FROM gets_rfx_regions rr WHERE rr.rfx_id=COALESCE(gr.rfx_id,pr.rfx_id)) AS graph_regions,
+ (SELECT group_concat(DISTINCT rc.unspsc_description) FROM gets_rfx_unspsc_categories rc WHERE rc.rfx_id=COALESCE(gr.rfx_id,pr.rfx_id) AND trim(COALESCE(rc.unspsc_description,''))!='') AS graph_categories,
+ (SELECT count(*) FROM gets_supplier_records sp WHERE sp.rfx_id=COALESCE(gr.rfx_id,pr.rfx_id)) AS graph_supplier_count,
  s.dataset,s.publisher,s.record_id,s.source_url,s.published_at,s.retrieved_at,s.licence
  FROM relationships r JOIN entities e ON e.id=CASE WHEN r.subject_entity_id=?1 THEN r.object_entity_id ELSE r.subject_entity_id END
- LEFT JOIN gets_rfx_records gr ON gr.entity_id=e.id LEFT JOIN gets_supplier_records gs ON gs.entity_id=e.id JOIN sources s ON s.id=r.source_id
+ LEFT JOIN gets_rfx_records gr ON gr.entity_id=e.id LEFT JOIN gets_supplier_records gs ON gs.entity_id=e.id LEFT JOIN gets_rfx_records pr ON pr.rfx_id=gs.rfx_id JOIN sources s ON s.id=r.source_id
  WHERE r.subject_entity_id=?1 OR r.object_entity_id=?1 ORDER BY r.predicate,e.canonical_name LIMIT 250`).bind(id).all();
  const graphSecondHop=await db.prepare(`
  WITH direct AS (SELECT CASE WHEN r.subject_entity_id=?1 THEN r.object_entity_id ELSE r.subject_entity_id END AS entity_id,r.predicate,e.canonical_name FROM relationships r JOIN entities e ON e.id=CASE WHEN r.subject_entity_id=?1 THEN r.object_entity_id ELSE r.subject_entity_id END WHERE r.subject_entity_id=?1 OR r.object_entity_id=?1 ORDER BY r.predicate,e.canonical_name LIMIT 24)
