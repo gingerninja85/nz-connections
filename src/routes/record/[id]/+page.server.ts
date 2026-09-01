@@ -88,10 +88,15 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     `, getsRfx.rfx_id);
     sourceEvidence = await getsFirst(platform.env.DB, `
       SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
+      FROM entity_sources es
+      JOIN sources s ON s.id = es.source_id
+      WHERE es.entity_id = ?1
+      UNION ALL
+      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
       FROM relationships r
       JOIN sources s ON s.id = r.source_id
       WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-      ORDER BY s.retrieved_at DESC
+      ORDER BY retrieved_at DESC
       LIMIT 1
     `, id);
   }
@@ -105,10 +110,15 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     `, getsSupplier.rfx_id);
     sourceEvidence = await getsFirst(platform.env.DB, `
       SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
+      FROM entity_sources es
+      JOIN sources s ON s.id = es.source_id
+      WHERE es.entity_id = ?1
+      UNION ALL
+      SELECT s.dataset, s.publisher, s.record_id, s.source_url, s.published_at, s.retrieved_at, s.licence
       FROM relationships r
       JOIN sources s ON s.id = r.source_id
       WHERE r.subject_entity_id = ?1 OR r.object_entity_id = ?1
-      ORDER BY s.retrieved_at DESC
+      ORDER BY retrieved_at DESC
       LIMIT 1
     `, id);
   }

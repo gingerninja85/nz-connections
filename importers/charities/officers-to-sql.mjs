@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 /** Charities Services officers -> NZ Connections SQL, bulk-capable. */
+import { buildCharityRegisterUrl } from './charity-source-url.mjs';
 const BASE='http://www.odata.charities.govt.nz';
 const PUBLISHER='Charities Services, Department of Internal Affairs';
 const DATASET='charities-register-officers';
@@ -30,7 +31,7 @@ for(const officer of officers){
  const officerId=pick(officer,'OfficerId','OfficerID','Id','ID'); const position=pick(officer,'PositioninOrganisation','Position','OfficerPosition','Role'); const effective=pick(officer,'PositionAppointmentDate','EffectiveDate','DateAppointed','AppointmentDate'); const past=pick(officer,'LastDateAsAnOfficer','PastSince','DateRemoved','EndDate');
  // OfficerId is source-scoped identity. Never merge a same-named person across datasets.
  const identity=officerId?`id-${officerId}`:`organisation-${oid}-${slugify(fullName)}-${slugify(effective??'')}`; const officerSlug=`charities-officer-${slugify(identity)}`; const recordId=officerId?String(officerId):`${oid}:${fullName}:${effective??''}`;
- const sourceUrl=`https://register.charities.govt.nz/CharitiesRegister/ViewCharity?search=1&charityRegistrationNumber=${encodeURIComponent(registration)}`; const metadata={source_dataset:'Charities Register',officer_position:position,body_corporate:body,organisation_id:oid};
+ const sourceUrl=buildCharityRegisterUrl(registration); if(!sourceUrl){unresolved++;continue;} const metadata={source_dataset:'Charities Register',officer_position:position,body_corporate:body,organisation_id:oid};
  console.log(`INSERT INTO entities(entity_type,canonical_name,slug,status,metadata_json,updated_at) VALUES (${body?"'other'":"'person'"},${sql(fullName)},${sql(officerSlug)},${sql(past?'past officer':'current officer')},${sql(JSON.stringify(metadata))},CURRENT_TIMESTAMP) ON CONFLICT(slug) DO UPDATE SET canonical_name=excluded.canonical_name,status=excluded.status,metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP;`);
  console.log(`INSERT INTO sources(dataset,publisher,record_id,source_url,retrieved_at,licence,importer_version) VALUES (${sql(DATASET)},${sql(PUBLISHER)},${sql(recordId)},${sql(sourceUrl)},${sql(retrievedAt)},'Creative Commons Attribution 3.0 New Zealand','charities-officers-v3') ON CONFLICT DO NOTHING;`);
  console.log(`INSERT INTO entity_sources(entity_id,source_id,metadata_json) SELECT e.id,s.id,'{"role":"officer-register-record"}' FROM entities e JOIN sources s ON s.dataset=${sql(DATASET)} AND s.record_id=${sql(recordId)} WHERE e.slug=${sql(officerSlug)} ON CONFLICT(entity_id,source_id) DO UPDATE SET metadata_json=excluded.metadata_json;`);
