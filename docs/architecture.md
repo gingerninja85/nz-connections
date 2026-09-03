@@ -1,4 +1,4 @@
-# NZ Connections architecture
+# NZ Records architecture
 
 ## Mission
 
@@ -68,4 +68,6 @@ D1 is deliberately the MVP store. The canonical entity/relationship model does n
 
 ## Deployment
 
-Initial deployment target: Cloudflare Workers with a generated `workers.dev` address. After validation, attach `connections.askhermie.dev` as a custom domain.
+Initial deployment target: Cloudflare Workers, optionally using a generated `workers.dev` address before attaching the production custom domain `nzrecords.co.nz`. Production runs on Cloudflare Workers backed by Cloudflare D1.
+
+Development is separate from production and does not require deploying to Cloudflare: it runs Vite (on port 5173) behind Nginx, published as `dev.nzrecords.co.nz` through a Cloudflare Tunnel on the Ubuntu development server.

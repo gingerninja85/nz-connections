@@ -1,8 +1,8 @@
-# NZ Connections
+# NZ Records
 
 Open-source relationship explorer for New Zealand public-interest data.
 
-> **Evidence, not conclusions.** NZ Connections connects public records and shows the provenance behind every relationship. It does not assign suspicion or infer wrongdoing.
+> **Evidence, not conclusions.** NZ Records connects public records and shows the provenance behind every relationship. It does not assign suspicion or infer wrongdoing.
 
 ## Status
 
@@ -22,16 +22,27 @@ npm install
 npm run dev
 ```
 
-The D1 schema lives in `database/schema.sql`. A production D1 binding will be added to `wrangler.jsonc` after the Cloudflare database is created.
+The D1 schema lives in `database/schema.sql`. A D1 binding named `DB` is already declared in `wrangler.jsonc`; it can be used once the Cloudflare database exists and is connected.
 
-## Deploy
+## Deploy (production)
 
 ```bash
 npm run build
 npm run deploy
 ```
 
-The initial Worker can use its `workers.dev` address. The intended test/public hostname is `connections.askhermie.dev` once the Cloudflare project is connected.
+The Worker is deployed to Cloudflare Workers. The initial deployment can use its `workers.dev` address, then the production custom domain `nzrecords.co.nz` is attached once the project is connected. Production runs on Cloudflare Workers backed by a Cloudflare D1 database.
+
+## Development (local)
+
+Development runs separately from production and does not require deploying to Cloudflare:
+
+```bash
+npm install
+npm run dev
+```
+
+The Vite server listens on `0.0.0.0:5173`. On the separate Ubuntu development server, Nginx proxies to that port and a Cloudflare Tunnel publishes it as `dev.nzrecords.co.nz`. This is independent of the production Worker and its custom domains.
 
 ## Documentation
 
